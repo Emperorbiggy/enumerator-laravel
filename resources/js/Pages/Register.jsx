@@ -532,6 +532,48 @@ export default function Register() {
                                         {errors.browsing_number && <p className="text-red-500 text-sm mt-1">{errors.browsing_number}</p>}
                                     </div>
 
+                                    {/* Bank Details */}
+                                    {/* Account Number */}
+                                    <div>
+                                        <label className="block text-gray-700 font-semibold mb-2">
+                                            <i className="fas fa-credit-card text-yellow-400 mr-2"></i>
+                                            Account Number <span className="text-red-500">*</span>
+                                        </label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                name="account_number"
+                                                value={formData.account_number}
+                                                onChange={handleInputChange}
+                                                maxLength={10}
+                                                className={`flex-1 px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 ${errors.account_number ? 'border-red-500' : 'border-gray-300'}`}
+                                                placeholder="10-digit account number"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleVerifyAccount}
+                                                disabled={!formData.account_number || !formData.bank_name || formData.account_number.length !== 10 || verifyingAccount}
+                                                className="px-4 py-3 bg-yellow-400 text-yellow-800 rounded-lg font-semibold hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                            >
+                                                {verifyingAccount ? (
+                                                    <>
+                                                        <div className="w-4 h-4 border-2 border-yellow-800 border-t-transparent rounded-full animate-spin inline-block mr-2"></div>
+                                                        Verifying...
+                                                    </>
+                                                ) : (
+                                                    'Verify'
+                                                )}
+                                            </button>
+                                        </div>
+                                        {errors.account_number && <p className="text-red-500 text-sm mt-1">{errors.account_number}</p>}
+                                        {accountVerification && (
+                                            <p className="text-green-600 text-sm mt-1">
+                                                <i className="fas fa-check-circle mr-1"></i>
+                                                Verified: {accountVerification.account_name}
+                                            </p>
+                                        )}
+                                    </div>
+
                                     {/* Bank */}
                                     <div className="md:col-span-2">
                                         <label className="block text-gray-700 font-semibold mb-2">
@@ -575,47 +617,6 @@ export default function Register() {
                                             <p className="text-green-600 text-sm mt-1">
                                                 <i className="fas fa-check-circle mr-1"></i>
                                                 Account verified successfully
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    {/* Account Number */}
-                                    <div>
-                                        <label className="block text-gray-700 font-semibold mb-2">
-                                            <i className="fas fa-credit-card text-yellow-400 mr-2"></i>
-                                            Account Number <span className="text-red-500">*</span>
-                                        </label>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                name="account_number"
-                                                value={formData.account_number}
-                                                onChange={handleInputChange}
-                                                maxLength={10}
-                                                className={`flex-1 px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 ${errors.account_number ? 'border-red-500' : 'border-gray-300'}`}
-                                                placeholder="10-digit account number"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={handleVerifyAccount}
-                                                disabled={!formData.account_number || !formData.bank_name || formData.account_number.length !== 10 || verifyingAccount}
-                                                className="px-4 py-3 bg-yellow-400 text-yellow-800 rounded-lg font-semibold hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                                            >
-                                                {verifyingAccount ? (
-                                                    <>
-                                                        <div className="w-4 h-4 border-2 border-yellow-800 border-t-transparent rounded-full animate-spin inline-block mr-2"></div>
-                                                        Verifying...
-                                                    </>
-                                                ) : (
-                                                    'Verify'
-                                                )}
-                                            </button>
-                                        </div>
-                                        {errors.account_number && <p className="text-red-500 text-sm mt-1">{errors.account_number}</p>}
-                                        {accountVerification && (
-                                            <p className="text-green-600 text-sm mt-1">
-                                                <i className="fas fa-check-circle mr-1"></i>
-                                                Verified: {accountVerification.account_name}
                                             </p>
                                         )}
                                     </div>
