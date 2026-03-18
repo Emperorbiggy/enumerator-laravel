@@ -4,6 +4,8 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
 
 class EnumeratorDataService
 {
@@ -15,43 +17,31 @@ class EnumeratorDataService
     public function getLGAs(): array
     {
         return Cache::remember('lgas', self::CACHE_TTL, function () {
-            // For now, return hardcoded data - replace with actual API call
-            return [
-                ['id' => 1, 'name' => 'Atakumosa East'],
-                ['id' => 2, 'name' => 'Atakumosa West'],
-                ['id' => 3, 'name' => 'Ayedaade'],
-                ['id' => 4, 'name' => 'Ayedire'],
-                ['id' => 5, 'name' => 'Boluwaduro'],
-                ['id' => 6, 'name' => 'Boripe'],
-                ['id' => 7, 'name' => 'Ede North'],
-                ['id' => 8, 'name' => 'Ede South'],
-                ['id' => 9, 'name' => 'Egbedore'],
-                ['id' => 10, 'name' => 'Ejigbo'],
-                ['id' => 11, 'name' => 'Ife Central'],
-                ['id' => 12, 'name' => 'Ife East'],
-                ['id' => 13, 'name' => 'Ife North'],
-                ['id' => 14, 'name' => 'Ife South'],
-                ['id' => 15, 'name' => 'Ifedayo'],
-                ['id' => 16, 'name' => 'Ifelodun'],
-                ['id' => 17, 'name' => 'Ila'],
-                ['id' => 18, 'name' => 'Ilesa East'],
-                ['id' => 19, 'name' => 'Ilesa West'],
-                ['id' => 20, 'name' => 'Irepodun'],
-                ['id' => 21, 'name' => 'Irewole'],
-                ['id' => 22, 'name' => 'Isokan'],
-                ['id' => 23, 'name' => 'Iwo'],
-                ['id' => 24, 'name' => 'Obokun'],
-                ['id' => 25, 'name' => 'Odo Otin'],
-                ['id' => 26, 'name' => 'Ola Oluwa'],
-                ['id' => 27, 'name' => 'Olorunda'],
-                ['id' => 28, 'name' => 'Oriade'],
-                ['id' => 29, 'name' => 'Orolu'],
-                ['id' => 30, 'name' => 'Osogbo'],
-            ];
-
-            // Example of actual API call:
-            // $response = Http::get('https://api.example.com/lgas');
-            // return $response->json();
+            try {
+                $baseUrl = Config::get('services.pu_api.url');
+                $url = "{$baseUrl}/api/lgas";
+                
+                Log::info('Fetching LGAs from external API', ['url' => $url]);
+                
+                $response = Http::timeout(30)->get($url);
+                
+                if ($response->successful()) {
+                    $data = $response->json();
+                    Log::info('Successfully fetched LGAs', ['count' => count($data)]);
+                    return $data;
+                } else {
+                    Log::error('Failed to fetch LGAs', [
+                        'status' => $response->status(),
+                        'response' => $response->body()
+                    ]);
+                    return [];
+                }
+            } catch (\Exception $e) {
+                Log::error('Exception while fetching LGAs', [
+                    'error' => $e->getMessage()
+                ]);
+                return [];
+            }
         });
     }
 
@@ -61,39 +51,49 @@ class EnumeratorDataService
     public function getWardsByLGA(string $lgaName): array
     {
         return Cache::remember("wards_{$lgaName}", self::CACHE_TTL, function () use ($lgaName) {
-            $wardData = [
-                'Atakumosa East' => [
-                    ['id' => 1, 'name' => 'Ward 1: Osu'],
-                    ['id' => 2, 'name' => 'Ward 2: Ifewara'],
-                    ['id' => 3, 'name' => 'Ward 3: Oke-Bode'],
-                    ['id' => 4, 'name' => 'Ward 4: Oke-Ila'],
-                    ['id' => 5, 'name' => 'Ward 5: Ijabe'],
-                    ['id' => 6, 'name' => 'Ward 6: Idominasi'],
-                    ['id' => 7, 'name' => 'Ward 7: Ikeji-Ile'],
-                    ['id' => 8, 'name' => 'Ward 8: Ikeji-Arakeji'],
-                    ['id' => 9, 'name' => 'Ward 9: Oke-Ila Orangun'],
-                    ['id' => 10, 'name' => 'Ward 10: Ipetu-Ile'],
-                ],
-                'Atakumosa West' => [
-                    ['id' => 11, 'name' => 'Ward 1: Ibodi'],
-                    ['id' => 12, 'name' => 'Ward 2: Ifelodun'],
-                    ['id' => 13, 'name' => 'Ward 3: Iba'],
-                    ['id' => 14, 'name' => 'Ward 4: Oke-Omi'],
-                    ['id' => 15, 'name' => 'Ward 5: Odo-Owa'],
-                    ['id' => 16, 'name' => 'Ward 6: Isare'],
-                    ['id' => 17, 'name' => 'Ward 7: Iperindo'],
-                    ['id' => 18, 'name' => 'Ward 8: Ajebandele'],
-                    ['id' => 19, 'name' => 'Ward 9: Owa-kajola'],
-                    ['id' => 20, 'name' => 'Ward 10: Oke-Irun'],
-                ],
-                // Add more LGAs as needed...
-            ];
+            try {
+                // First get the LGA ID by name
+                $lgaId = $this->getLGAIdByName($lgaName);
+                
+                if (!$lgaId) {
+                    Log::warning('LGA not found', ['lga_name' => $lgaName]);
+                    return [];
+                }
 
-            return $wardData[$lgaName] ?? [];
-
-            // Example of actual API call:
-            // $response = Http::get("https://api.example.com/lgas/{$lgaId}/wards");
-            // return $response->json();
+                $baseUrl = Config::get('services.pu_api.url');
+                $url = "{$baseUrl}/api/wards-by-lga/{$lgaId}";
+                
+                Log::info('Fetching wards from external API', [
+                    'url' => $url,
+                    'lga_id' => $lgaId,
+                    'lga_name' => $lgaName
+                ]);
+                
+                $response = Http::timeout(30)->get($url);
+                
+                if ($response->successful()) {
+                    $data = $response->json();
+                    Log::info('Successfully fetched wards', [
+                        'lga_name' => $lgaName,
+                        'count' => count($data)
+                    ]);
+                    return $data;
+                } else {
+                    Log::error('Failed to fetch wards', [
+                        'lga_name' => $lgaName,
+                        'lga_id' => $lgaId,
+                        'status' => $response->status(),
+                        'response' => $response->body()
+                    ]);
+                    return [];
+                }
+            } catch (\Exception $e) {
+                Log::error('Exception while fetching wards', [
+                    'lga_name' => $lgaName,
+                    'error' => $e->getMessage()
+                ]);
+                return [];
+            }
         });
     }
 
@@ -103,48 +103,89 @@ class EnumeratorDataService
     public function getPollingUnitsByWard(string $wardName): array
     {
         return Cache::remember("polling_units_{$wardName}", self::CACHE_TTL, function () use ($wardName) {
-            $pollingUnitData = [
-                'Ward 1: Osu' => [
-                    ['id' => 1, 'name' => 'PU 001: Osu Central School'],
-                    ['id' => 2, 'name' => 'PU 002: Osu Market Square'],
-                    ['id' => 3, 'name' => 'PU 003: Osu Primary Health Center'],
-                    ['id' => 4, 'name' => 'PU 004: Oluode\'s Palace'],
-                    ['id' => 5, 'name' => 'PU 005: Osu Grammar School'],
-                ],
-                'Ward 2: Ifewara' => [
-                    ['id' => 6, 'name' => 'PU 001: Ifewara Town Hall'],
-                    ['id' => 7, 'name' => 'PU 002: Ifewara Central Mosque'],
-                    ['id' => 8, 'name' => 'PU 003: Ifewara Primary School'],
-                    ['id' => 9, 'name' => 'PU 004: Oke-Oja Ifewara'],
-                    ['id' => 10, 'name' => 'PU 005: Ifewara Market'],
-                ],
-                // Add more wards as needed...
-            ];
+            try {
+                // First get the ward ID by name
+                $wardId = $this->getWardIdByName($wardName);
+                
+                if (!$wardId) {
+                    Log::warning('Ward not found', ['ward_name' => $wardName]);
+                    return [];
+                }
 
-            return $pollingUnitData[$wardName] ?? [];
-
-            // Example of actual API call:
-            // $response = Http::get("https://api.example.com/wards/{$wardId}/polling-units");
-            // return $response->json();
+                $baseUrl = Config::get('services.pu_api.url');
+                $url = "{$baseUrl}/api/polling-units-by-ward/{$wardId}";
+                
+                Log::info('Fetching polling units from external API', [
+                    'url' => $url,
+                    'ward_id' => $wardId,
+                    'ward_name' => $wardName
+                ]);
+                
+                $response = Http::timeout(30)->get($url);
+                
+                if ($response->successful()) {
+                    $data = $response->json();
+                    Log::info('Successfully fetched polling units', [
+                        'ward_name' => $wardName,
+                        'count' => count($data)
+                    ]);
+                    return $data;
+                } else {
+                    Log::error('Failed to fetch polling units', [
+                        'ward_name' => $wardName,
+                        'ward_id' => $wardId,
+                        'status' => $response->status(),
+                        'response' => $response->body()
+                    ]);
+                    return [];
+                }
+            } catch (\Exception $e) {
+                Log::error('Exception while fetching polling units', [
+                    'ward_name' => $wardName,
+                    'error' => $e->getMessage()
+                ]);
+                return [];
+            }
         });
     }
 
     /**
-     * Get default polling units for wards not specifically defined
+     * Get LGA ID by name
      */
-    public function getDefaultPollingUnits(string $wardName): array
+    private function getLGAIdByName(string $lgaName): ?int
     {
-        return [
-            ['id' => 999, 'name' => "PU 001: {$wardName} Central School"],
-            ['id' => 1000, 'name' => "PU 002: {$wardName} Market Square"],
-            ['id' => 1001, 'name' => "PU 003: {$wardName} Health Center"],
-            ['id' => 1002, 'name' => "PU 004: {$wardName} Town Hall"],
-            ['id' => 1003, 'name' => "PU 005: {$wardName} Grammar School"],
-            ['id' => 1004, 'name' => "PU 006: {$wardName} Primary School"],
-            ['id' => 1005, 'name' => "PU 007: {$wardName} Community Center"],
-            ['id' => 1006, 'name' => "PU 008: {$wardName} Motor Park"],
-            ['id' => 1007, 'name' => "PU 009: {$wardName} Local Government Secretariat"],
-            ['id' => 1008, 'name' => "PU 010: {$wardName} Palace Ground"],
-        ];
+        $lgas = $this->getLGAs();
+        
+        foreach ($lgas as $lga) {
+            // Case-insensitive comparison
+            if (strcasecmp($lga['name'], $lgaName) === 0) {
+                return $lga['id'];
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Get ward ID by name
+     */
+    private function getWardIdByName(string $wardName): ?int
+    {
+        // This is a bit tricky since we don't have all wards cached
+        // For now, we'll need to search through all LGAs to find the ward
+        $lgas = $this->getLGAs();
+        
+        foreach ($lgas as $lga) {
+            $wards = $this->getWardsByLGA($lga['name']);
+            
+            foreach ($wards as $ward) {
+                // Case-insensitive comparison
+                if (strcasecmp($ward['name'], $wardName) === 0) {
+                    return $ward['id'];
+                }
+            }
+        }
+        
+        return null;
     }
 }

@@ -6,8 +6,9 @@ use App\Models\Enumerator;
 use App\Services\EnumeratorDataService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use Inertia\Inertia;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
 
 class EnumeratorController extends Controller
 {
@@ -55,11 +56,6 @@ class EnumeratorController extends Controller
 
         try {
             $wards = $this->dataService->getWardsByLGA($request->lga);
-            
-            // If no specific wards found, return default ones
-            if (empty($wards)) {
-                $wards = $this->dataService->getDefaultPollingUnits($request->lga);
-            }
 
             return response()->json([
                 'success' => true,
@@ -91,11 +87,6 @@ class EnumeratorController extends Controller
 
         try {
             $pollingUnits = $this->dataService->getPollingUnitsByWard($request->ward);
-            
-            // If no specific polling units found, return default ones
-            if (empty($pollingUnits)) {
-                $pollingUnits = $this->dataService->getDefaultPollingUnits($request->ward);
-            }
 
             return response()->json([
                 'success' => true,
@@ -126,7 +117,7 @@ class EnumeratorController extends Controller
 
         $validator = Validator::make($request->all(), [
             'full_name' => 'required|string|max:255',
-            'email' => 'required|email|unique:enumerators,email',
+            'email' => 'required|email',
             'whatsapp' => 'required|string|max:20',
             'state' => 'required|string|max:100',
             'lga' => 'required|string|max:100',
@@ -195,6 +186,44 @@ class EnumeratorController extends Controller
                 'timestamp' => now()->toISOString()
             ]);
 
+            // Send email with enumerator code
+            try {
+                $emailData = [
+                    'full_name' => $enumerator->full_name,
+                    'email' => $enumerator->email,
+                    'code' => $enumerator->code,
+                    'whatsapp' => $enumerator->whatsapp,
+                    'state' => $enumerator->state,
+                    'lga' => $enumerator->lga,
+                    'ward' => $enumerator->ward,
+                    'polling_unit' => $enumerator->polling_unit,
+                    'registered_at' => $enumerator->registered_at,
+                ];
+
+                Mail::send('emails.enumerator-code', $emailData, function ($message) use ($enumerator) {
+                    $message->to($enumerator->email, $enumerator->full_name)
+                            ->subject('Your Enumerator Registration Code - Accord Party')
+                            ->from(config('mail.from.address'), config('mail.from.name'));
+                });
+
+                Log::info('Enumerator Code Email Sent Successfully', [
+                    'enumerator_id' => $enumerator->id,
+                    'email' => $enumerator->email,
+                    'code' => $enumerator->code,
+                    'timestamp' => now()->toISOString()
+                ]);
+
+            } catch (\Exception $mailException) {
+                Log::error('Failed to Send Enumerator Code Email', [
+                    'enumerator_id' => $enumerator->id,
+                    'email' => $enumerator->email,
+                    'code' => $enumerator->code,
+                    'error' => $mailException->getMessage(),
+                    'timestamp' => now()->toISOString()
+                ]);
+                // Continue with registration even if email fails
+            }
+
             $successData = [
                 'id' => $enumerator->id,
                 'code' => $enumerator->code,
@@ -205,7 +234,7 @@ class EnumeratorController extends Controller
 
             if ($request->inertia()) {
                 return redirect()
-                    ->route('register')
+                    ->route('enumerator.register')
                     ->with('success', true)
                     ->with('data', $successData);
             }

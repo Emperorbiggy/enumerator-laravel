@@ -40,4 +40,8 @@ return [
         'secret_key' => env('PAYSTACK_SECRET_KEY'),
     ],
 
+    'pu_api' => [
+        'url' => env('PU_URL', 'http://pu.osun.accordofficial.com'),
+    ],
+
 ];

@@ -13,7 +13,7 @@ Route::get('/', function () {
 
 Route::get('/register-enumerator', function () {
     return Inertia::render('Register');
-})->name('register');
+})->name('enumerator.register');
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');

@@ -565,9 +565,10 @@ export default function Register() {
                                             name="account_name"
                                             value={formData.account_name}
                                             onChange={handleInputChange}
-                                            className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 ${errors.account_name ? 'border-red-500' : 'border-gray-300'} ${accountVerification ? 'bg-green-50' : ''}`}
+                                            className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 ${errors.account_name ? 'border-red-500' : 'border-gray-300'} ${accountVerification ? 'bg-green-50' : 'bg-gray-100 cursor-not-allowed'}`}
                                             placeholder="Account name will be auto-filled"
-                                            readOnly={accountVerification !== null}
+                                            readOnly
+                                            disabled={!accountVerification}
                                         />
                                         {errors.account_name && <p className="text-red-500 text-sm mt-1">{errors.account_name}</p>}
                                         {accountVerification && (
