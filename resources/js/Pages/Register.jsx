@@ -135,9 +135,13 @@ export default function Register() {
         if (name === 'bank_name') {
             setAccountVerification(null);
             setShowAccountConfirmation(false);
+            // Auto-verify if account number is already entered
+            if (formData.account_number && formData.account_number.length === 10) {
+                verifyAccount(formData.account_number, value);
+            }
         }
 
-        // Auto-verify account when both bank and account number are filled
+        // Auto-verify account when 10 digits are entered and bank is selected
         if (name === 'account_number' && value.length === 10 && formData.bank_name) {
             verifyAccount(value, formData.bank_name);
         }
@@ -533,6 +537,28 @@ export default function Register() {
                                     </div>
 
                                     {/* Bank Details */}
+                                    {/* Bank */}
+                                    <div className="md:col-span-2">
+                                        <label className="block text-gray-700 font-semibold mb-2">
+                                            <i className="fas fa-university text-yellow-400 mr-2"></i>
+                                            Select Your Bank <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            name="bank_name"
+                                            value={formData.bank_name}
+                                            onChange={handleInputChange}
+                                            className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 ${errors.bank_name ? 'border-red-500' : 'border-gray-300'}`}
+                                        >
+                                            <option value="">-- Select your bank --</option>
+                                            {banks.map((bank) => (
+                                                <option key={bank.code} value={bank.name}>
+                                                    {bank.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {errors.bank_name && <p className="text-red-500 text-sm mt-1">{errors.bank_name}</p>}
+                                    </div>
+
                                     {/* Account Number */}
                                     <div>
                                         <label className="block text-gray-700 font-semibold mb-2">
@@ -572,28 +598,6 @@ export default function Register() {
                                                 Verified: {accountVerification.account_name}
                                             </p>
                                         )}
-                                    </div>
-
-                                    {/* Bank */}
-                                    <div className="md:col-span-2">
-                                        <label className="block text-gray-700 font-semibold mb-2">
-                                            <i className="fas fa-university text-yellow-400 mr-2"></i>
-                                            Select Your Bank <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            name="bank_name"
-                                            value={formData.bank_name}
-                                            onChange={handleInputChange}
-                                            className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 ${errors.bank_name ? 'border-red-500' : 'border-gray-300'}`}
-                                        >
-                                            <option value="">-- Select your bank --</option>
-                                            {banks.map((bank) => (
-                                                <option key={bank.code} value={bank.name}>
-                                                    {bank.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        {errors.bank_name && <p className="text-red-500 text-sm mt-1">{errors.bank_name}</p>}
                                     </div>
 
                                     {/* Account Name */}
