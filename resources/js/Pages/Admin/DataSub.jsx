@@ -3,11 +3,12 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 
 export default function DataSub() {
-    const { topPerformers, filteredPerformers, networks, selectedNetwork, stats } = usePage().props;
+    const { topPerformers, filteredPerformers, networks, selectedNetwork, stats, externalData } = usePage().props;
     const [selectedNetworkLocal, setSelectedNetworkLocal] = useState(selectedNetwork);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedItems, setSelectedItems] = useState(new Set());
     const [selectAll, setSelectAll] = useState(false);
+    const [externalDataState, setExternalDataState] = useState(externalData || null);
 
     // Handle network selection
     const handleNetworkChange = (network) => {
@@ -123,6 +124,73 @@ export default function DataSub() {
                         </div>
                     </div>
                 </div>
+
+                {/* External API Data Section */}
+                {externalDataState && (
+                    <div className="bg-white shadow rounded-lg mb-6">
+                        <div className="px-4 py-5 sm:p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg leading-6 font-medium text-gray-900 flex items-center">
+                                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center mr-3">
+                                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                                        </svg>
+                                    </div>
+                                    Available Data Plans
+                                </h3>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    API Connected
+                                </span>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {Array.isArray(externalDataState) ? (
+                                    externalDataState.slice(0, 6).map((plan, index) => (
+                                        <div key={index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <h4 className="text-sm font-medium text-gray-900">{plan.name || plan.plan_name || `Plan ${index + 1}`}</h4>
+                                                <span className="text-lg font-bold text-green-600">₦{plan.price || plan.amount || '0'}</span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 space-y-1">
+                                                {plan.size && <div>Size: {plan.size}</div>}
+                                                {plan.validity && <div>Validity: {plan.validity}</div>}
+                                                {plan.network && <div>Network: {plan.network}</div>}
+                                                {plan.type && <div>Type: {plan.type}</div>}
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="col-span-full">
+                                        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+                                            <div className="flex">
+                                                <div className="flex-shrink-0">
+                                                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                    </svg>
+                                                </div>
+                                                <div className="ml-3">
+                                                    <h3 className="text-sm font-medium text-yellow-800">Data Format Notice</h3>
+                                                    <div className="mt-2 text-sm text-yellow-700">
+                                                        <p>External API data received but format needs to be processed.</p>
+                                                        <p className="mt-1">Raw data: {JSON.stringify(externalDataState).substring(0, 100)}...</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {Array.isArray(externalDataState) && externalDataState.length > 6 && (
+                                <div className="mt-4 text-center">
+                                    <button className="text-yellow-600 hover:text-yellow-500 text-sm font-medium">
+                                        View all {externalDataState.length} data plans →
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Controls Section */}
                 <div className="bg-white shadow rounded-lg mb-6">

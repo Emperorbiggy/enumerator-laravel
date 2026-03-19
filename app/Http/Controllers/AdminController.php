@@ -443,6 +443,56 @@ class AdminController extends Controller
     }
 
     /**
+     * Fetch data from external API
+     */
+    private function fetchExternalData()
+    {
+        try {
+            $dataUrl = env('DATA_URL') . '/api/data';
+            $apiToken = env('DATA_API');
+            
+            $client = new \GuzzleHttp\Client([
+                'timeout' => 30,
+                'headers' => [
+                    'accept' => '*/*',
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'Content-Type' => 'application/json',
+                ],
+            ]);
+
+            $response = $client->get($dataUrl);
+            
+            if ($response->getStatusCode() === 200) {
+                $data = json_decode($response->getBody()->getContents(), true);
+                
+                Log::info('External API data fetched successfully', [
+                    'url' => $dataUrl,
+                    'status' => $response->getStatusCode(),
+                    'data_count' => is_array($data) ? count($data) : 0,
+                    'timestamp' => now()->toISOString()
+                ]);
+                
+                return $data;
+            } else {
+                Log::warning('External API returned non-200 status', [
+                    'url' => $dataUrl,
+                    'status' => $response->getStatusCode(),
+                    'timestamp' => now()->toISOString()
+                ]);
+                return null;
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch external API data', [
+                'error' => $e->getMessage(),
+                'url' => $dataUrl ?? 'unknown',
+                'timestamp' => now()->toISOString()
+            ]);
+            return null;
+        }
+    }
+
+    /**
      * Show data subscription page for top performers
      */
     public function dataSub(Request $request)
@@ -471,6 +521,9 @@ class AdminController extends Controller
                 $filteredPerformers = $topPerformers;
             }
 
+            // Fetch external API data
+            $externalData = $this->fetchExternalData();
+
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
             
             Log::info('Admin: Data Sub Successful', [
@@ -478,6 +531,7 @@ class AdminController extends Controller
                 'selected_network' => $selectedNetwork,
                 'filtered_count' => $filteredPerformers->count(),
                 'available_networks' => $networks->toArray(),
+                'external_data_fetched' => $externalData !== null,
                 'response_time_ms' => $responseTime,
                 'timestamp' => now()->toISOString()
             ]);
@@ -487,6 +541,7 @@ class AdminController extends Controller
                 'filteredPerformers' => $filteredPerformers,
                 'networks' => $networks,
                 'selectedNetwork' => $selectedNetwork,
+                'externalData' => $externalData,
                 'stats' => [
                     'total_top_performers' => $topPerformers->count(),
                     'unique_networks' => $networks->count(),
