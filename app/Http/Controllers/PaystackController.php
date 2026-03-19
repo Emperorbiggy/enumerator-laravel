@@ -59,6 +59,7 @@ class PaystackController extends Controller
             Log::info('Paystack: List Banks Response Received', [
                 'status_code' => $response->status(),
                 'response_time_ms' => $responseTime,
+                'response_data' => $responseData,
                 'success' => $response->successful(),
                 'timestamp' => now()->toISOString()
             ]);
@@ -71,11 +72,11 @@ class PaystackController extends Controller
                 ]);
             }
 
-            // ✅ Safe check
+            // Check if response is successful and has expected structure
             if ($response->successful() && isset($responseData['status']) && $responseData['status'] === true) {
-
                 Log::info('Paystack: List Banks Successful', [
-                    'banks_count' => count($responseData['data'] ?? [])
+                    'banks_count' => isset($responseData['data']) ? count($responseData['data']) : 0,
+                    'response_structure' => array_keys($responseData)
                 ]);
 
                 return response()->json([
@@ -84,15 +85,19 @@ class PaystackController extends Controller
                 ]);
             }
 
+            // Handle API failure responses
             Log::error('Paystack: List Banks Failed', [
+                'error_message' => $responseData['message'] ?? 'API request failed',
                 'status_code' => $response->status(),
-                'raw_body' => $rawBody
+                'response_structure' => array_keys($responseData),
+                'full_response' => $responseData
             ]);
 
             return response()->json([
                 'status' => false,
-                'message' => $responseData['message'] ?? 'Failed to fetch banks'
-            ], 400);
+                'message' => $responseData['message'] ?? 'Failed to fetch banks from Paystack',
+                'data' => []
+            ], $response->status());
 
         } catch (\Throwable $e) {
 
