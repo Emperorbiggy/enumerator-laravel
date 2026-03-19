@@ -105,43 +105,57 @@ class AdminController extends Controller
         ]);
 
         try {
-            // Get all enumerators with their member counts
-            $enumerators = Enumerator::select('id', 'code', 'full_name', 'email', 'whatsapp', 'lga', 'ward', 'registered_at')
-                ->withCount(['externalMembers as members_registered'])
-                ->orderBy('members_registered', 'desc')
-                ->paginate(50);
-
-            // Get performance statistics
-            $stats = [
-                'total_enumerators' => Enumerator::count(),
-                'total_members_registered' => ExternalMember::count(),
-                'enumerators_with_members' => Enumerator::whereHas('externalMembers')->count(),
-                'enumerators_without_members' => Enumerator::whereDoesntHave('externalMembers')->count(),
-                'average_members_per_enumerator' => ExternalMember::count() / max(Enumerator::count(), 1),
-                'top_performer' => Enumerator::withCount('externalMembers as members_registered')
+            // Try using the relationship first
+            try {
+                // Get all enumerators with their member counts
+                $enumerators = Enumerator::select('id', 'code', 'full_name', 'email', 'whatsapp', 'lga', 'ward', 'registered_at')
+                    ->withCount(['externalMembers as members_registered'])
                     ->orderBy('members_registered', 'desc')
-                    ->first(),
-            ];
+                    ->paginate(50);
 
-            // Top performers
-            $topPerformers = Enumerator::withCount('externalMembers as members_registered')
-                ->orderBy('members_registered', 'desc')
-                ->limit(10)
-                ->get(['id', 'code', 'full_name', 'email', 'lga', 'members_registered']);
+                // Get performance statistics
+                $stats = [
+                    'total_enumerators' => Enumerator::count(),
+                    'total_members_registered' => ExternalMember::count(),
+                    'enumerators_with_members' => Enumerator::whereHas('externalMembers')->count(),
+                    'enumerators_without_members' => Enumerator::whereDoesntHave('externalMembers')->count(),
+                    'average_members_per_enumerator' => ExternalMember::count() / max(Enumerator::count(), 1),
+                    'top_performer' => Enumerator::withCount('externalMembers as members_registered')
+                        ->orderBy('members_registered', 'desc')
+                        ->first(),
+                ];
 
-            // Performance by LGA
-            $performanceByLga = Enumerator::select('lga', DB::raw('COUNT(*) as enumerator_count'), DB::raw('SUM(external_members_count) as total_members'))
-                ->joinSub(
-                    ExternalMember::select('agentcode', DB::raw('COUNT(*) as external_members_count'))
-                        ->groupBy('agentcode'),
-                    'member_counts',
-                    'enumerators.code',
-                    '=',
-                    'member_counts.agentcode'
-                )
-                ->groupBy('lga')
-                ->orderBy('total_members', 'desc')
-                ->get();
+                // Top performers
+                $topPerformers = Enumerator::withCount('externalMembers as members_registered')
+                    ->orderBy('members_registered', 'desc')
+                    ->limit(10)
+                    ->get(['id', 'code', 'full_name', 'email', 'lga', 'members_registered']);
+
+                // Performance by LGA
+                $performanceByLga = Enumerator::select('lga', DB::raw('COUNT(*) as enumerator_count'), DB::raw('SUM(external_members_count) as total_members'))
+                    ->joinSub(
+                        ExternalMember::select('agentcode', DB::raw('COUNT(*) as external_members_count'))
+                            ->groupBy('agentcode'),
+                        'member_counts',
+                        'enumerators.code',
+                        '=',
+                        'member_counts.agentcode'
+                    )
+                    ->groupBy('lga')
+                    ->orderBy('total_members', 'desc')
+                    ->get();
+
+            } catch (\Exception $relationError) {
+                Log::warning('Admin: Relationship method failed, using direct connection', [
+                    'error' => $relationError->getMessage()
+                ]);
+
+                // Fallback: Use direct database connection
+                $enumerators = $this->getEnumeratorPerformanceDirect();
+                $stats = $this->getPerformanceStatsDirect();
+                $topPerformers = $this->getTopPerformersDirect();
+                $performanceByLga = $this->getPerformanceByLgaDirect();
+            }
 
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
             
@@ -177,9 +191,142 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch enumerator performance data',
-                'error' => app()->environment('local') ? $e->getMessage() : 'Database error'
+                'error' => app()->environment('local') ? $e->getMessage() : 'Database permission error. Contact administrator.'
             ], 500);
         }
+    }
+
+    /**
+     * Get enumerator performance using direct database connection
+     */
+    private function getEnumeratorPerformanceDirect()
+    {
+        // Get enumerators
+        $enumerators = Enumerator::select('id', 'code', 'full_name', 'email', 'whatsapp', 'lga', 'ward', 'registered_at')
+            ->orderBy('registered_at', 'desc')
+            ->get();
+
+        // Get member counts from external database
+        $memberCounts = DB::connection('external_mysql')
+            ->select('agentcode', DB::raw('COUNT(*) as count'))
+            ->groupBy('agentcode')
+            ->pluck('count', 'agentcode');
+
+        // Attach member counts to enumerators
+        $enumerators->each(function ($enumerator) use ($memberCounts) {
+            $enumerator->members_registered = $memberCounts->get($enumerator->code, 0);
+        });
+
+        // Sort by member count
+        $enumerators = $enumerators->sortByDesc('members_registered')->values();
+
+        // Manually paginate
+        $page = request()->get('page', 1);
+        $perPage = 50;
+        $offset = ($page - 1) * $perPage;
+        
+        $paginated = new \Illuminate\Pagination\LengthAwarePaginator(
+            $enumerators->slice($offset, $perPage),
+            $enumerators->count(),
+            $perPage,
+            $page
+        );
+
+        return $paginated;
+    }
+
+    /**
+     * Get performance stats using direct connection
+     */
+    private function getPerformanceStatsDirect()
+    {
+        $totalEnumerators = Enumerator::count();
+        $totalMembers = ExternalMember::count();
+        
+        // Get member counts by agent code
+        $memberCounts = DB::connection('external_mysql')
+            ->select('agentcode', DB::raw('COUNT(*) as count'))
+            ->groupBy('agentcode')
+            ->pluck('count', 'agentcode');
+
+        $enumeratorsWithMembers = 0;
+        $topPerformerCount = 0;
+        $topPerformer = null;
+
+        foreach ($memberCounts as $agentCode => $count) {
+            if ($count > 0) {
+                $enumeratorsWithMembers++;
+            }
+            if ($count > $topPerformerCount) {
+                $topPerformerCount = $count;
+                $topPerformer = Enumerator::where('code', $agentCode)->first();
+                if ($topPerformer) {
+                    $topPerformer->members_registered = $count;
+                }
+            }
+        }
+
+        return [
+            'total_enumerators' => $totalEnumerators,
+            'total_members_registered' => $totalMembers,
+            'enumerators_with_members' => $enumeratorsWithMembers,
+            'enumerators_without_members' => $totalEnumerators - $enumeratorsWithMembers,
+            'average_members_per_enumerator' => $totalMembers / max($totalEnumerators, 1),
+            'top_performer' => $topPerformer,
+        ];
+    }
+
+    /**
+     * Get top performers using direct connection
+     */
+    private function getTopPerformersDirect()
+    {
+        // Get member counts by agent code
+        $memberCounts = DB::connection('external_mysql')
+            ->select('agentcode', DB::raw('COUNT(*) as count'))
+            ->groupBy('agentcode')
+            ->orderBy('count', 'desc')
+            ->limit(10)
+            ->get();
+
+        $topPerformers = collect();
+        foreach ($memberCounts as $memberCount) {
+            $enumerator = Enumerator::where('code', $memberCount->agentcode)->first();
+            if ($enumerator) {
+                $enumerator->members_registered = $memberCount->count;
+                $topPerformers->push($enumerator);
+            }
+        }
+
+        return $topPerformers;
+    }
+
+    /**
+     * Get performance by LGA using direct connection
+     */
+    private function getPerformanceByLgaDirect()
+    {
+        // Get member counts by agent code
+        $memberCounts = DB::connection('external_mysql')
+            ->select('agentcode', DB::raw('COUNT(*) as count'))
+            ->groupBy('agentcode')
+            ->pluck('count', 'agentcode');
+
+        // Group by LGA
+        $lgaPerformance = Enumerator::all()->groupBy('lga')->map(function ($enumerators, $lga) use ($memberCounts) {
+            $totalMembers = 0;
+            foreach ($enumerators as $enumerator) {
+                $totalMembers += $memberCounts->get($enumerator->code, 0);
+            }
+
+            return (object) [
+                'lga' => $lga,
+                'enumerator_count' => $enumerators->count(),
+                'total_members' => $totalMembers,
+            ];
+        })->sortByDesc('total_members')->values();
+
+        return $lgaPerformance;
     }
 
     public function enumerators(Request $request)
