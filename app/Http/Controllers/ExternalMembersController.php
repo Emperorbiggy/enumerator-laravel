@@ -234,6 +234,31 @@ class ExternalMembersController extends Controller
     public function testConnection()
     {
         try {
+            // Log the database configuration (without password for security)
+            $dbConfig = config('database.connections.external_mysql');
+            
+            Log::info('External Database Configuration', [
+                'driver' => $dbConfig['driver'] ?? 'not_set',
+                'host' => $dbConfig['host'] ?? 'not_set',
+                'port' => $dbConfig['port'] ?? 'not_set',
+                'database' => $dbConfig['database'] ?? 'not_set',
+                'username' => $dbConfig['username'] ?? 'not_set',
+                'password_set' => !empty($dbConfig['password']),
+                'charset' => $dbConfig['charset'] ?? 'not_set',
+                'collation' => $dbConfig['collation'] ?? 'not_set',
+                'timestamp' => now()->toISOString()
+            ]);
+
+            // Log environment variables (without password)
+            Log::info('Environment Variables for External DB', [
+                'DB_EXTERNAL_HOST' => env('DB_EXTERNAL_HOST', 'not_set'),
+                'DB_EXTERNAL_PORT' => env('DB_EXTERNAL_PORT', 'not_set'),
+                'DB_EXTERNAL_DATABASE' => env('DB_EXTERNAL_DATABASE', 'not_set'),
+                'DB_EXTERNAL_USERNAME' => env('DB_EXTERNAL_USERNAME', 'not_set'),
+                'DB_EXTERNAL_PASSWORD_SET' => !empty(env('DB_EXTERNAL_PASSWORD')),
+                'timestamp' => now()->toISOString()
+            ]);
+
             DB::connection('external_mysql')->getPdo();
             
             // Test a simple query
@@ -258,13 +283,22 @@ class ExternalMembersController extends Controller
             Log::error('External Database Connection Test Failed', [
                 'error_message' => $e->getMessage(),
                 'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
                 'timestamp' => now()->toISOString()
             ]);
 
             return response()->json([
                 'success' => false,
                 'message' => 'External database connection failed',
-                'error' => app()->environment('local') ? $e->getMessage() : 'Connection error'
+                'error' => app()->environment('local') ? $e->getMessage() : 'Connection error',
+                'debug_info' => [
+                    'config_loaded' => config('database.connections.external_mysql') !== null,
+                    'env_host' => env('DB_EXTERNAL_HOST'),
+                    'env_database' => env('DB_EXTERNAL_DATABASE'),
+                    'env_username' => env('DB_EXTERNAL_USERNAME'),
+                    'env_password_set' => !empty(env('DB_EXTERNAL_PASSWORD')),
+                ]
             ], 500);
         }
     }
