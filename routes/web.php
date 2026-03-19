@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\EnumeratorController;
 use App\Http\Controllers\PaystackController;
+use App\Http\Controllers\AdminController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -18,6 +19,19 @@ Route::get('/register-enumerator', function () {
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
+
+// Admin routes
+Route::prefix('admin')->name('admin.')->group(function () {
+    Route::get('/login', [AdminController::class, 'showLoginForm'])->name('login');
+    Route::post('/login', [AdminController::class, 'login'])->name('login.submit');
+    Route::post('/logout', [AdminController::class, 'logout'])->name('logout')->middleware('auth:admin');
+    
+    Route::middleware(['auth:admin'])->group(function () {
+        Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
+        Route::get('/enumerators', [AdminController::class, 'enumerators'])->name('enumerators');
+        Route::get('/enumerators/{enumerator}', [AdminController::class, 'showEnumerator'])->name('enumerators.show');
+    });
+});
 
 // Enumerator API routes
 Route::prefix('api/enumerator')->group(function () {

@@ -335,21 +335,21 @@ export default function Register() {
                                         <span className="bg-yellow-100 px-3 py-1 rounded block mt-2">{successData.email}</span>
                                     </p>
                                 </div>
-                                <button
-                                    onClick={() => setShowSuccess(false)}
-                                    className="mt-6 bg-yellow-400 text-yellow-800 px-6 py-3 rounded-lg font-semibold hover:bg-yellow-500 transition-colors"
-                                >
-                                    Register Another
-                                </button>
                                 <a
                                     href="https://chat.whatsapp.com/F2f6AeKVSDS2zRWhXcdAKH?mode=gi_t"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="mt-4 block w-full bg-green-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+                                    className="mt-4 block w-full bg-green-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-600 transition-all duration-300 flex items-center justify-center gap-2 animate-pulse hover:animate-none hover:scale-105 transform"
                                 >
                                     <i className="fab fa-whatsapp text-xl"></i>
                                     Join WhatsApp Group
                                 </a>
+                                <button
+                                    onClick={() => setShowSuccess(false)}
+                                    className="mt-4 text-yellow-600 hover:text-yellow-700 underline font-medium transition-colors"
+                                >
+                                    Register Another
+                                </button>
                             </div>
                         )}
 
@@ -550,8 +550,8 @@ export default function Register() {
                                             className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 ${errors.bank_name ? 'border-red-500' : 'border-gray-300'}`}
                                         >
                                             <option value="">-- Select your bank --</option>
-                                            {banks.map((bank) => (
-                                                <option key={bank.code} value={bank.name}>
+                                            {banks.map((bank, index) => (
+                                                <option key={`bank-${index}`} value={bank.name}>
                                                     {bank.name}
                                                 </option>
                                             ))}
