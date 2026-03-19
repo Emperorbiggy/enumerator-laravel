@@ -15,6 +15,7 @@ class PaystackController extends Controller
     public function listBanks(Request $request)
     {
         $startTime = microtime(true);
+
         $requestData = [
             'country' => $request->get('country', 'nigeria'),
             'perPage' => $request->get('perPage', 100),
@@ -29,6 +30,7 @@ class PaystackController extends Controller
 
         try {
             $url = 'https://api.paystack.co/bank';
+
             $headers = [
                 'Authorization' => 'Bearer ' . Config::get('services.paystack.secret_key'),
                 'Content-Type' => 'application/json',
@@ -36,8 +38,11 @@ class PaystackController extends Controller
 
             Log::info('Paystack: Making API Request', [
                 'url' => $url,
-                'headers' => array_merge($headers, ['Authorization' => 'Bearer [REDACTED]']),
-                'params' => ['country' => $requestData['country'], 'perPage' => $requestData['perPage']]
+                'headers' => ['Authorization' => 'Bearer [REDACTED]'],
+                'params' => [
+                    'country' => $requestData['country'],
+                    'perPage' => $requestData['perPage']
+                ]
             ]);
 
             $response = Http::withHeaders($headers)->get($url, [
@@ -46,37 +51,42 @@ class PaystackController extends Controller
             ]);
 
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+
+            $rawBody = $response->body();
             $responseData = $response->json();
 
+            // ✅ Log RAW + Parsed response (safe for debugging)
             Log::info('Paystack: List Banks Response Received', [
                 'status_code' => $response->status(),
                 'response_time_ms' => $responseTime,
-                'response_data' => $responseData,
                 'success' => $response->successful(),
                 'timestamp' => now()->toISOString()
             ]);
 
-            if ($responseData['status']) {
+            // Only log full response in local/dev
+            if (app()->environment('local')) {
+                Log::debug('Paystack RAW Response (Banks)', [
+                    'raw_body' => $rawBody,
+                    'parsed_json' => $responseData
+                ]);
+            }
+
+            // ✅ Safe check
+            if ($response->successful() && isset($responseData['status']) && $responseData['status'] === true) {
+
                 Log::info('Paystack: List Banks Successful', [
-                    'banks_count' => count($responseData['data']),
-                    'banks' => array_map(function($bank) {
-                        return [
-                            'name' => $bank['name'],
-                            'code' => $bank['code'],
-                            'active' => $bank['active'] ?? null
-                        ];
-                    }, $responseData['data'])
+                    'banks_count' => count($responseData['data'] ?? [])
                 ]);
 
                 return response()->json([
                     'status' => true,
-                    'data' => $responseData['data']
+                    'data' => $responseData['data'] ?? []
                 ]);
             }
 
             Log::error('Paystack: List Banks Failed', [
-                'error_message' => $responseData['message'] ?? 'Unknown error',
-                'full_response' => $responseData
+                'status_code' => $response->status(),
+                'raw_body' => $rawBody
             ]);
 
             return response()->json([
@@ -84,22 +94,19 @@ class PaystackController extends Controller
                 'message' => $responseData['message'] ?? 'Failed to fetch banks'
             ], 400);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
-            
+
             Log::error('Paystack: List Banks Exception', [
                 'error_message' => $e->getMessage(),
-                'error_code' => $e->getCode(),
-                'error_file' => $e->getFile(),
-                'error_line' => $e->getLine(),
                 'response_time_ms' => $responseTime,
-                'request_data' => $requestData,
                 'timestamp' => now()->toISOString()
             ]);
 
             return response()->json([
                 'status' => false,
-                'message' => 'Error fetching banks: ' . $e->getMessage()
+                'message' => 'Error fetching banks'
             ], 500);
         }
     }
@@ -110,41 +117,35 @@ class PaystackController extends Controller
     public function resolveAccount(Request $request)
     {
         $startTime = microtime(true);
-        $requestData = [
-            'account_number' => $request->get('account_number'),
-            'bank_code' => $request->get('bank_code'),
-            'ip' => $request->ip(),
-            'user_agent' => $request->userAgent()
-        ];
-
-        Log::info('Paystack: Resolve Account Request Started', [
-            'request_data' => [
-                'account_number' => $requestData['account_number'],
-                'bank_code' => $requestData['bank_code'],
-                'ip' => $requestData['ip']
-            ],
-            'timestamp' => now()->toISOString()
-        ]);
 
         $request->validate([
             'account_number' => 'required|string|digits:10',
             'bank_code' => 'required|string'
         ]);
 
+        $requestData = [
+            'account_number' => $request->get('account_number'),
+            'bank_code' => $request->get('bank_code'),
+            'ip' => $request->ip()
+        ];
+
+        Log::info('Paystack: Resolve Account Request Started', [
+            'request_data' => $requestData,
+            'timestamp' => now()->toISOString()
+        ]);
+
         try {
             $url = 'https://api.paystack.co/bank/resolve';
+
             $headers = [
                 'Authorization' => 'Bearer ' . Config::get('services.paystack.secret_key'),
                 'Content-Type' => 'application/json',
             ];
 
-            Log::info('Paystack: Making Account Verification API Request', [
+            Log::info('Paystack: Making Account Resolve Request', [
                 'url' => $url,
-                'headers' => array_merge($headers, ['Authorization' => 'Bearer [REDACTED]']),
-                'params' => [
-                    'account_number' => $requestData['account_number'],
-                    'bank_code' => $requestData['bank_code']
-                ]
+                'headers' => ['Authorization' => 'Bearer [REDACTED]'],
+                'params' => $requestData
             ]);
 
             $response = Http::withHeaders($headers)->get($url, [
@@ -153,23 +154,26 @@ class PaystackController extends Controller
             ]);
 
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+
+            $rawBody = $response->body();
             $responseData = $response->json();
 
-            Log::info('Paystack: Resolve Account Response Received', [
+            Log::info('Paystack: Resolve Response Received', [
                 'status_code' => $response->status(),
                 'response_time_ms' => $responseTime,
-                'response_data' => $responseData,
                 'success' => $response->successful(),
                 'timestamp' => now()->toISOString()
             ]);
 
-            if ($responseData['status']) {
-                Log::info('Paystack: Account Resolution Successful', [
-                    'account_number' => $responseData['data']['account_number'],
-                    'account_name' => $responseData['data']['account_name'],
-                    'bank_code' => $requestData['bank_code'],
-                    'verification_time_ms' => $responseTime
+            // Debug only in local
+            if (app()->environment('local')) {
+                Log::debug('Paystack RAW Response (Resolve)', [
+                    'raw_body' => $rawBody,
+                    'parsed_json' => $responseData
                 ]);
+            }
+
+            if ($response->successful() && isset($responseData['status']) && $responseData['status'] === true) {
 
                 return response()->json([
                     'status' => true,
@@ -177,11 +181,9 @@ class PaystackController extends Controller
                 ]);
             }
 
-            Log::error('Paystack: Account Resolution Failed', [
-                'error_message' => $responseData['message'] ?? 'Unknown error',
-                'account_number' => $requestData['account_number'],
-                'bank_code' => $requestData['bank_code'],
-                'full_response' => $responseData
+            Log::error('Paystack: Resolve Failed', [
+                'status_code' => $response->status(),
+                'raw_body' => $rawBody
             ]);
 
             return response()->json([
@@ -189,25 +191,19 @@ class PaystackController extends Controller
                 'message' => $responseData['message'] ?? 'Failed to resolve account'
             ], 400);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
-            
-            Log::error('Paystack: Resolve Account Exception', [
+
+            Log::error('Paystack: Resolve Exception', [
                 'error_message' => $e->getMessage(),
-                'error_code' => $e->getCode(),
-                'error_file' => $e->getFile(),
-                'error_line' => $e->getLine(),
                 'response_time_ms' => $responseTime,
-                'request_data' => [
-                    'account_number' => $requestData['account_number'],
-                    'bank_code' => $requestData['bank_code']
-                ],
                 'timestamp' => now()->toISOString()
             ]);
 
             return response()->json([
                 'status' => false,
-                'message' => 'Error resolving account: ' . $e->getMessage()
+                'message' => 'Error resolving account'
             ], 500);
         }
     }
