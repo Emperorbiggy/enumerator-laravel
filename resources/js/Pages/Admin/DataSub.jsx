@@ -10,17 +10,21 @@ export default function DataSub() {
     // Handle network selection
     const handleNetworkChange = (network) => {
         setSelectedNetworkLocal(network);
-        const url = network ? `/admin/data-sub?network=${network}` : '/admin/data-sub';
-        window.location.href = url;
+        setSelectedItems(new Set());
+        setSelectAll(false);
     };
 
-    // Filter performers based on search
-    const filteredData = filteredPerformers.filter(performer =>
-        searchTerm === '' || 
-        performer.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        performer.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        performer.email.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // Filter performers based on search and network
+    const filteredData = topPerformers.filter(performer => {
+        const matchesSearch = searchTerm === '' || 
+            performer.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            performer.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            performer.email.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        const matchesNetwork = !selectedNetworkLocal || performer.browsing_network === selectedNetworkLocal;
+        
+        return matchesSearch && matchesNetwork;
+    });
 
     // Network colors for badges
     const networkColors = {
@@ -31,6 +35,13 @@ export default function DataSub() {
         'mtn': 'bg-red-100 text-red-800',
         'glo': 'bg-green-100 text-green-800',
         'airtel': 'bg-blue-100 text-blue-800',
+    };
+
+    // Calculate local stats
+    const localStats = {
+        total_top_performers: topPerformers.length,
+        unique_networks: networks.length,
+        filtered_count: filteredData.length,
     };
 
     const getNetworkColor = (network) => {
@@ -46,7 +57,7 @@ export default function DataSub() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-yellow-100 text-sm font-medium">Top Performers</p>
-                                <p className="text-3xl font-bold">{stats.total_top_performers}</p>
+                                <p className="text-3xl font-bold">{localStats.total_top_performers}</p>
                                 <p className="text-yellow-100 text-xs">With 2+ members</p>
                             </div>
                             <div className="w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center">
@@ -61,7 +72,7 @@ export default function DataSub() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-blue-100 text-sm font-medium">Network Providers</p>
-                                <p className="text-3xl font-bold">{stats.unique_networks}</p>
+                                <p className="text-3xl font-bold">{localStats.unique_networks}</p>
                                 <p className="text-blue-100 text-xs">Available networks</p>
                             </div>
                             <div className="w-12 h-12 bg-blue-400 rounded-full flex items-center justify-center">
@@ -76,7 +87,7 @@ export default function DataSub() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-green-100 text-sm font-medium">Filtered Results</p>
-                                <p className="text-3xl font-bold">{stats.filtered_count}</p>
+                                <p className="text-3xl font-bold">{localStats.filtered_count}</p>
                                 {selectedNetworkLocal && <p className="text-green-100 text-xs">{selectedNetworkLocal} network</p>}
                             </div>
                             <div className="w-12 h-12 bg-green-400 rounded-full flex items-center justify-center">
@@ -141,7 +152,7 @@ export default function DataSub() {
                                 Top 10 Performers
                             </h3>
                             <div className="text-sm text-gray-500">
-                                Showing {filteredData.length} of {stats.total_top_performers} performers
+                                Showing {filteredData.length} of {localStats.total_top_performers} performers
                             </div>
                         </div>
 

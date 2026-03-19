@@ -1,35 +1,12 @@
 import React from 'react';
 import { Head, Link } from '@inertiajs/react';
+import AdminLayout from '@/Layouts/AdminLayout';
 
 export default function EnumeratorDetails({ enumerator }) {
     return (
-        <>
-            <Head title={`Enumerator Details - ${enumerator.full_name}`} />
-            
-            <div className="min-h-screen bg-gray-50">
-                {/* Header */}
-                <header className="bg-white shadow">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="flex justify-between items-center py-6">
-                            <div className="flex items-center">
-                                <Link href={route('admin.enumerators')} className="text-yellow-600 hover:text-yellow-500 mr-4">
-                                    ← Enumerators
-                                </Link>
-                                <h1 className="text-2xl font-bold text-gray-900">Enumerator Details</h1>
-                            </div>
-                            <Link
-                                href={route('admin.logout')}
-                                method="post"
-                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
-                            >
-                                Logout
-                            </Link>
-                        </div>
-                    </div>
-                </header>
-
-                <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-                    {/* Enumerator Info Card */}
+        <AdminLayout title={`Enumerator Details - ${enumerator.full_name}`}>
+            <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                {/* Enumerator Info Card */}
                     <div className="bg-white shadow overflow-hidden sm:rounded-lg">
                         <div className="px-4 py-5 sm:px-6">
                             <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
@@ -178,8 +155,7 @@ export default function EnumeratorDetails({ enumerator }) {
                             Print Details
                         </button>
                     </div>
-                </main>
             </div>
-        </>
+        </AdminLayout>
     );
 }

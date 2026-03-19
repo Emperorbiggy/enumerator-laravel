@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
+import AdminLayout from '@/Layouts/AdminLayout';
 
 export default function Enumerators({ enumerators, lgas, filters }) {
     const [search, setSearch] = useState(filters.search || '');
@@ -30,33 +31,9 @@ export default function Enumerators({ enumerators, lgas, filters }) {
     };
 
     return (
-        <>
-            <Head title="Enumerators Management" />
-            
-            <div className="min-h-screen bg-gray-50">
-                {/* Header */}
-                <header className="bg-white shadow">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="flex justify-between items-center py-6">
-                            <div className="flex items-center">
-                                <Link href={route('admin.dashboard')} className="text-yellow-600 hover:text-yellow-500 mr-4">
-                                    ← Dashboard
-                                </Link>
-                                <h1 className="text-2xl font-bold text-gray-900">Enumerators Management</h1>
-                            </div>
-                            <Link
-                                href={route('admin.logout')}
-                                method="post"
-                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
-                            >
-                                Logout
-                            </Link>
-                        </div>
-                    </div>
-                </header>
-
-                <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-                    {/* Filters */}
+        <AdminLayout title="Enumerators Management">
+            <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                {/* Filters */}
                     <div className="bg-white shadow rounded-lg mb-6">
                         <div className="px-4 py-5 sm:p-6">
                             <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Filters</h3>
@@ -272,8 +249,7 @@ export default function Enumerators({ enumerators, lgas, filters }) {
                             </div>
                         )}
                     </div>
-                </main>
-            </div>
-        </>
+                </div>
+            </AdminLayout>
     );
 }
