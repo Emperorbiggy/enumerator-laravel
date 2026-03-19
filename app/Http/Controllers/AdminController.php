@@ -208,6 +208,7 @@ class AdminController extends Controller
 
         // Get member counts from external database
         $memberCounts = DB::connection('external_mysql')
+            ->table('members')
             ->select('agentcode', DB::raw('COUNT(*) as count'))
             ->groupBy('agentcode')
             ->pluck('count', 'agentcode');
@@ -241,10 +242,11 @@ class AdminController extends Controller
     private function getPerformanceStatsDirect()
     {
         $totalEnumerators = Enumerator::count();
-        $totalMembers = ExternalMember::count();
+        $totalMembers = DB::connection('external_mysql')->table('members')->count();
         
         // Get member counts by agent code
         $memberCounts = DB::connection('external_mysql')
+            ->table('members')
             ->select('agentcode', DB::raw('COUNT(*) as count'))
             ->groupBy('agentcode')
             ->pluck('count', 'agentcode');
@@ -283,6 +285,7 @@ class AdminController extends Controller
     {
         // Get member counts by agent code
         $memberCounts = DB::connection('external_mysql')
+            ->table('members')
             ->select('agentcode', DB::raw('COUNT(*) as count'))
             ->groupBy('agentcode')
             ->orderBy('count', 'desc')
@@ -308,6 +311,7 @@ class AdminController extends Controller
     {
         // Get member counts by agent code
         $memberCounts = DB::connection('external_mysql')
+            ->table('members')
             ->select('agentcode', DB::raw('COUNT(*) as count'))
             ->groupBy('agentcode')
             ->pluck('count', 'agentcode');
