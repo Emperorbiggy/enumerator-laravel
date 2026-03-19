@@ -7,12 +7,13 @@ $app = require_once __DIR__.'/bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
-echo "External Database Debug Test\n";
-echo "============================\n\n";
-
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Env;
+use Illuminate\Support\Facades\DB;
+
+echo "External Database Debug Test\n";
+echo "============================\n\n";
 
 // Check if .env is being loaded
 echo "1. Environment Variables Check:\n";
@@ -50,8 +51,6 @@ echo "\n4. Test Connection:\n";
 echo "-------------------\n";
 
 try {
-    use Illuminate\Support\Facades\DB;
-    
     // Test connection
     $pdo = DB::connection('external_mysql')->getPdo();
     echo "Database Connection: SUCCESS\n";
