@@ -33,4 +33,12 @@ class Enumerator extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
+
+    /**
+     * Get the external members registered by this enumerator
+     */
+    public function externalMembers()
+    {
+        return $this->hasMany(ExternalMember::class, 'agentcode', 'code');
+    }
 }
