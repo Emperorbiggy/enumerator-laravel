@@ -6,12 +6,37 @@ export default function DataSub() {
     const { topPerformers, filteredPerformers, networks, selectedNetwork, stats } = usePage().props;
     const [selectedNetworkLocal, setSelectedNetworkLocal] = useState(selectedNetwork);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedItems, setSelectedItems] = useState(new Set());
+    const [selectAll, setSelectAll] = useState(false);
 
     // Handle network selection
     const handleNetworkChange = (network) => {
         setSelectedNetworkLocal(network);
         setSelectedItems(new Set());
         setSelectAll(false);
+    };
+
+    // Handle individual selection
+    const handleItemSelect = (performerId) => {
+        const newSelected = new Set(selectedItems);
+        if (newSelected.has(performerId)) {
+            newSelected.delete(performerId);
+        } else {
+            newSelected.add(performerId);
+        }
+        setSelectedItems(newSelected);
+        setSelectAll(newSelected.size === filteredData.length);
+    };
+
+    // Handle select all
+    const handleSelectAll = () => {
+        if (selectAll) {
+            setSelectedItems(new Set());
+        } else {
+            const allIds = filteredData.map(performer => performer.id);
+            setSelectedItems(new Set(allIds));
+        }
+        setSelectAll(!selectAll);
     };
 
     // Filter performers based on search and network
@@ -102,7 +127,7 @@ export default function DataSub() {
                 {/* Controls Section */}
                 <div className="bg-white shadow rounded-lg mb-6">
                     <div className="px-4 py-5 sm:p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {/* Network Filter */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -135,6 +160,27 @@ export default function DataSub() {
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                                 />
                             </div>
+
+                            {/* Selection Controls */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Selection Actions
+                                </label>
+                                <div className="flex space-x-2">
+                                    <button
+                                        onClick={handleSelectAll}
+                                        className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-md text-sm font-medium"
+                                    >
+                                        {selectAll ? 'Deselect All' : 'Select All'}
+                                    </button>
+                                    <button
+                                        disabled={selectedItems.size === 0}
+                                        className="flex-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-md text-sm font-medium disabled:cursor-not-allowed"
+                                    >
+                                        Send Data ({selectedItems.size})
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -143,16 +189,31 @@ export default function DataSub() {
                 <div className="bg-white shadow rounded-lg">
                     <div className="px-4 py-5 sm:p-6">
                         <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-xl leading-6 font-bold text-gray-900 flex items-center">
-                                <div className="w-8 h-8 bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-lg flex items-center justify-center mr-3">
-                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                                    </svg>
+                            <div className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    checked={selectAll}
+                                    onChange={handleSelectAll}
+                                    className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded mr-3"
+                                />
+                                <h3 className="text-xl leading-6 font-bold text-gray-900 flex items-center">
+                                    <div className="w-8 h-8 bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-lg flex items-center justify-center mr-3">
+                                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                        </svg>
+                                    </div>
+                                    Top 10 Performers
+                                </h3>
+                            </div>
+                            <div className="flex items-center space-x-4">
+                                {selectedItems.size > 0 && (
+                                    <span className="text-sm text-green-600 font-medium">
+                                        {selectedItems.size} selected
+                                    </span>
+                                )}
+                                <div className="text-sm text-gray-500">
+                                    Showing {filteredData.length} of {localStats.total_top_performers} performers
                                 </div>
-                                Top 10 Performers
-                            </h3>
-                            <div className="text-sm text-gray-500">
-                                Showing {filteredData.length} of {localStats.total_top_performers} performers
                             </div>
                         </div>
 
@@ -163,6 +224,14 @@ export default function DataSub() {
                                         <div className="flex items-center justify-between">
                                             {/* Left Section - Rank and Basic Info */}
                                             <div className="flex items-center flex-1">
+                                                {/* Checkbox */}
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedItems.has(performer.id)}
+                                                    onChange={() => handleItemSelect(performer.id)}
+                                                    className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded mr-4"
+                                                />
+                                                
                                                 {/* Rank Badge */}
                                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-4 text-white font-bold text-lg ${
                                                     index === 0 ? 'bg-yellow-500 shadow-lg' : 
