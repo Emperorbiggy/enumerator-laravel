@@ -257,6 +257,12 @@ class EnumeratorDataService
      */
     private function getWardIdByName(string $wardName): ?int
     {
+        Log::info('DataService: Searching for ward ID', [
+            'ward_name' => $wardName,
+            'url_encoded' => urlencode($wardName),
+            'timestamp' => now()->toISOString()
+        ]);
+
         // This is a bit tricky since we don't have all wards cached
         // For now, we'll need to search through all LGAs to find the ward
         $lgas = $this->getLGAs();
@@ -265,12 +271,54 @@ class EnumeratorDataService
             $wards = $this->getWardsByLGA($lga['name']);
             
             foreach ($wards as $ward) {
+                // Try multiple comparison methods
+                $wardNameFromApi = trim($ward['name']);
+                $searchName = trim($wardName);
+                
                 // Case-insensitive comparison
-                if (strcasecmp($ward['name'], $wardName) === 0) {
+                if (strcasecmp($wardNameFromApi, $searchName) === 0) {
+                    Log::info('DataService: Found ward by exact match', [
+                        'search_name' => $searchName,
+                        'found_name' => $wardNameFromApi,
+                        'ward_id' => $ward['id'],
+                        'lga' => $lga['name']
+                    ]);
+                    return $ward['id'];
+                }
+                
+                // Try removing extra spaces and normalizing
+                $normalizedSearch = preg_replace('/\s+/', ' ', $searchName);
+                $normalizedFound = preg_replace('/\s+/', ' ', $wardNameFromApi);
+                
+                if (strcasecmp($normalizedFound, $normalizedSearch) === 0) {
+                    Log::info('DataService: Found ward by normalized match', [
+                        'search_name' => $normalizedSearch,
+                        'found_name' => $normalizedFound,
+                        'ward_id' => $ward['id'],
+                        'lga' => $lga['name']
+                    ]);
+                    return $ward['id'];
+                }
+                
+                // Try URL decoded comparison (for names with slashes)
+                $urlDecodedSearch = urldecode($searchName);
+                if (strcasecmp($wardNameFromApi, $urlDecodedSearch) === 0) {
+                    Log::info('DataService: Found ward by URL decoded match', [
+                        'search_name' => $urlDecodedSearch,
+                        'found_name' => $wardNameFromApi,
+                        'ward_id' => $ward['id'],
+                        'lga' => $lga['name']
+                    ]);
                     return $ward['id'];
                 }
             }
         }
+        
+        Log::warning('DataService: Ward not found after all matching attempts', [
+            'ward_name' => $wardName,
+            'total_lgas_checked' => count($lgas),
+            'timestamp' => now()->toISOString()
+        ]);
         
         return null;
     }
