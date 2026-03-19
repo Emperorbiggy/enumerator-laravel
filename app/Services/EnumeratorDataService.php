@@ -25,11 +25,23 @@ class EnumeratorDataService
                 
                 Log::info('DataService: Fetching LGAs from external API', [
                     'url' => $url,
+                    'base_url' => $baseUrl,
                     'cache_hit' => false,
                     'timestamp' => now()->toISOString()
                 ]);
                 
                 $response = Http::timeout(30)->get($url);
+                
+                // Log detailed response information
+                Log::info('DataService: LGAs API Response Details', [
+                    'url' => $url,
+                    'status_code' => $response->status(),
+                    'successful' => $response->successful(),
+                    'headers' => $response->headers(),
+                    'response_body' => $response->body(),
+                    'response_time_ms' => round((microtime(true) - $startTime) * 1000, 2),
+                    'timestamp' => now()->toISOString()
+                ]);
                 
                 if ($response->successful()) {
                     $data = $response->json();
@@ -39,6 +51,7 @@ class EnumeratorDataService
                         'count' => is_array($data) ? count($data) : 0,
                         'response_time_ms' => $responseTime,
                         'status_code' => $response->status(),
+                        'data_sample' => is_array($data) && !empty($data) ? $data[0] : null,
                         'timestamp' => now()->toISOString()
                     ]);
                     return $data;
@@ -49,6 +62,7 @@ class EnumeratorDataService
                         'status' => $response->status(),
                         'response_time_ms' => $responseTime,
                         'response_body' => $response->body(),
+                        'headers' => $response->headers(),
                         'timestamp' => now()->toISOString()
                     ]);
                     return [];

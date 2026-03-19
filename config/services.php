@@ -46,7 +46,7 @@ return [
     ],
 
     'pu_api' => [
-        'url' => env('PU_URL', 'http://pu.osun.accordofficial.com'),
+        'url' => env('PU_URL', 'https://api.sandbox.easinovation.com.ng'),
     ],
 
 ];
