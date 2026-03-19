@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Head, Link, usePage } from '@inertiajs/react';
+import AdminLayout from '@/Layouts/AdminLayout';
 
 export default function EnumeratorMembers() {
     const { enumerator, members, total_members } = usePage().props;
@@ -8,47 +9,8 @@ export default function EnumeratorMembers() {
     const [currentPage, setCurrentPage] = useState(1);
 
     return (
-        <>
-            <Head title={`Members Registered by ${enumerator.full_name}`} />
-            
-            <div className="min-h-screen bg-gray-50">
-                {/* Header */}
-                <header className="bg-white shadow">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="flex justify-between items-center py-6">
-                            <div className="flex items-center">
-                                <Link
-                                    href="/admin/dashboard"
-                                    className="text-gray-600 hover:text-gray-900 mr-4"
-                                >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                    </svg>
-                                </Link>
-                                <div>
-                                    <h1 className="text-2xl font-bold text-gray-900">Enumerator Members</h1>
-                                    <p className="text-sm text-gray-500">
-                                        Viewing members registered by <span className="font-medium">{enumerator.full_name}</span>
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex items-center space-x-4">
-                                <div className="text-right">
-                                    <p className="text-sm text-gray-500">Total Members</p>
-                                    <p className="text-2xl font-bold text-green-600">{total_members.toLocaleString()}</p>
-                                </div>
-                                <Link
-                                    href="/admin/dashboard"
-                                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium"
-                                >
-                                    Back to Dashboard
-                                </Link>
-                            </div>
-                        </div>
-                    </div>
-                </header>
-
-                <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <AdminLayout title="Enumerator Members">
+            <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                     {/* Enumerator Info Card */}
                     <div className="bg-white shadow rounded-lg mb-6">
                         <div className="px-4 py-5 sm:p-6">
@@ -253,8 +215,7 @@ export default function EnumeratorMembers() {
                             </div>
                         </div>
                     )}
-                </main>
             </div>
-        </>
+        </AdminLayout>
     );
-}
+} 

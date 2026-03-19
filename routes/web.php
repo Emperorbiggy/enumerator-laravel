@@ -19,22 +19,22 @@ Route::get('/register-enumerator', function () {
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+})->name('dashboard');
 
 // Admin routes
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/login', [AdminController::class, 'showLoginForm'])->name('login');
     Route::post('/login', [AdminController::class, 'login'])->name('login.submit');
-    Route::post('/logout', [AdminController::class, 'logout'])->name('logout')->middleware('auth:admin');
+    Route::post('/logout', [AdminController::class, 'logout'])->name('logout');
     
-    Route::middleware(['auth:admin'])->group(function () {
-        Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
-        Route::get('/enumerators', [AdminController::class, 'enumerators'])->name('enumerators');
-        Route::get('/enumerator-performance', [AdminController::class, 'enumeratorPerformance'])->name('enumerator.performance');
-        Route::get('/enumerator/{code}/members', [AdminController::class, 'showEnumeratorMembers'])->name('enumerator.members');
-        Route::get('/data-plan-management', [AdminController::class, 'dataPlanManagement'])->name('data.plan.management');
-        Route::get('/enumerators/{enumerator}', [AdminController::class, 'showEnumerator'])->name('enumerators.show');
-    });
+    // Admin routes without authentication
+    Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
+    Route::get('/enumerators', [AdminController::class, 'enumerators'])->name('enumerators');
+    Route::get('/enumerator-performance', [AdminController::class, 'enumeratorPerformance'])->name('enumerator.performance');
+    Route::get('/enumerator/{code}/members', [AdminController::class, 'showEnumeratorMembers'])->name('enumerator.members');
+    Route::get('/data-sub', [AdminController::class, 'dataSub'])->name('data.sub');
+    Route::get('/data-plan-management', [AdminController::class, 'dataPlanManagement'])->name('data.plan.management');
+    Route::get('/enumerators/{enumerator}', [AdminController::class, 'showEnumerator'])->name('enumerators.show');
 });
 
 // Enumerator API routes
@@ -60,10 +60,10 @@ Route::prefix('api/external-members')->group(function () {
     Route::get('/{id}', [ExternalMembersController::class, 'show']);
 });
 
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-});
+// Profile routes without authentication
+Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-require __DIR__.'/auth.php';
+// Authentication routes disabled - no login required
+// require __DIR__.'/auth.php';

@@ -39,12 +39,8 @@ class AdminController extends Controller
 
     public function logout(Request $request)
     {
-        Auth::guard('admin')->logout();
-        
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-        
-        return redirect()->route('admin.login');
+        // Since no authentication is required, just redirect to dashboard
+        return redirect()->route('admin.dashboard');
     }
 
     public function dashboard()
@@ -444,6 +440,122 @@ class AdminController extends Controller
             ->paginate(20);
 
         return $members;
+    }
+
+    /**
+     * Show data subscription page for top performers
+     */
+    public function dataSub(Request $request)
+    {
+        $startTime = microtime(true);
+        
+        Log::info('Admin: Data Sub Request Started', [
+            'ip' => $request->ip(),
+            'timestamp' => now()->toISOString()
+        ]);
+
+        try {
+            // Get top performers with more than 2 members
+            $topPerformers = $this->getTopPerformersForDataSub();
+            
+            // Get unique networks from the data
+            $networks = $topPerformers->pluck('browsing_network')->unique()->filter()->values();
+            
+            // Get selected network from request
+            $selectedNetwork = $request->get('network', '');
+            $filteredPerformers = collect();
+            
+            if ($selectedNetwork && $networks->contains($selectedNetwork)) {
+                $filteredPerformers = $topPerformers->where('browsing_network', $selectedNetwork);
+            } else {
+                $filteredPerformers = $topPerformers;
+            }
+
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::info('Admin: Data Sub Successful', [
+                'total_top_performers' => $topPerformers->count(),
+                'selected_network' => $selectedNetwork,
+                'filtered_count' => $filteredPerformers->count(),
+                'available_networks' => $networks->toArray(),
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            return Inertia::render('Admin/DataSub', [
+                'topPerformers' => $topPerformers,
+                'filteredPerformers' => $filteredPerformers,
+                'networks' => $networks,
+                'selectedNetwork' => $selectedNetwork,
+                'stats' => [
+                    'total_top_performers' => $topPerformers->count(),
+                    'unique_networks' => $networks->count(),
+                    'filtered_count' => $filteredPerformers->count(),
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::error('Admin: Data Sub Failed', [
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            abort(500, 'Failed to load data subscription page');
+        }
+    }
+
+    /**
+     * Get top performers with more than 2 members for data subscription
+     */
+    private function getTopPerformersForDataSub()
+    {
+        try {
+            // Use the performance stats logic but filter for > 2 members
+            try {
+                $enumerators = Enumerator::select('id', 'code', 'full_name', 'email', 'whatsapp', 'lga', 'ward', 'browsing_number', 'browsing_network', 'registered_at')
+                    ->withCount(['externalMembers as members_registered'])
+                    ->having('members_registered', '>', 2)
+                    ->orderBy('members_registered', 'desc')
+                    ->get();
+            } catch (\Exception $relationError) {
+                Log::warning('Admin: Using direct connection for data sub performers', [
+                    'error' => $relationError->getMessage()
+                ]);
+
+                // Fallback: Use direct database connection
+                $memberCounts = DB::connection('external_mysql')
+                    ->table('members')
+                    ->select('agentcode', DB::raw('COUNT(*) as count'))
+                    ->groupBy('agentcode')
+                    ->having('count', '>', 2)
+                    ->orderBy('count', 'desc')
+                    ->pluck('count', 'agentcode');
+
+                $enumerators = Enumerator::select('id', 'code', 'full_name', 'email', 'whatsapp', 'lga', 'ward', 'browsing_number', 'browsing_network', 'registered_at')
+                    ->whereIn('code', $memberCounts->keys())
+                    ->get();
+
+                // Attach member counts
+                $enumerators = $enumerators->map(function ($enumerator) use ($memberCounts) {
+                    $enumerator->members_registered = $memberCounts->get($enumerator->code, 0);
+                    return $enumerator;
+                })->sortByDesc('members_registered')->values();
+            }
+
+            return $enumerators;
+
+        } catch (\Exception $e) {
+            Log::error('Admin: Failed to get data sub performers', [
+                'error' => $e->getMessage()
+            ]);
+            return collect();
+        }
     }
 
     /**
