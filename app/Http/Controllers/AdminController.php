@@ -333,6 +333,119 @@ class AdminController extends Controller
         return $lgaPerformance;
     }
 
+    /**
+     * Show members registered by a specific enumerator
+     */
+    public function showEnumeratorMembers(Request $request, $code)
+    {
+        $startTime = microtime(true);
+        
+        Log::info('Admin: Show Enumerator Members Request Started', [
+            'code' => $code,
+            'ip' => $request->ip(),
+            'timestamp' => now()->toISOString()
+        ]);
+
+        try {
+            // Get enumerator details
+            $enumerator = Enumerator::where('code', $code)->first();
+            
+            if (!$enumerator) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Enumerator not found'
+                    ], 404);
+                }
+                abort(404);
+            }
+
+            // Try using relationship first
+            try {
+                $members = $enumerator->externalMembers()->paginate(20);
+                $totalMembers = $enumerator->externalMembers()->count();
+            } catch (\Exception $relationError) {
+                Log::warning('Admin: Relationship method failed for enumerator members, using direct connection', [
+                    'error' => $relationError->getMessage(),
+                    'enumerator_code' => $code
+                ]);
+
+                // Fallback: Use direct database connection
+                $members = $this->getEnumeratorMembersDirect($code);
+                $totalMembers = DB::connection('external_mysql')
+                    ->table('members')
+                    ->where('agentcode', $code)
+                    ->count();
+            }
+
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::info('Admin: Show Enumerator Members Successful', [
+                'enumerator_code' => $code,
+                'members_count' => $members->count(),
+                'total_members' => $totalMembers,
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            // Return JSON for API calls, Inertia for web requests
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'enumerator' => $enumerator,
+                        'members' => $members,
+                        'total_members' => $totalMembers,
+                    ],
+                    'response_time_ms' => $responseTime
+                ]);
+            }
+
+            return Inertia::render('Admin/EnumeratorMembers', [
+                'enumerator' => $enumerator,
+                'members' => $members,
+                'total_members' => $totalMembers,
+            ]);
+
+        } catch (\Exception $e) {
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::error('Admin: Show Enumerator Members Failed', [
+                'enumerator_code' => $code,
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to fetch enumerator members',
+                    'error' => app()->environment('local') ? $e->getMessage() : 'Database error'
+                ], 500);
+            }
+
+            abort(500, 'Failed to fetch enumerator members');
+        }
+    }
+
+    /**
+     * Get enumerator members using direct database connection
+     */
+    private function getEnumeratorMembersDirect($code)
+    {
+        $members = DB::connection('external_mysql')
+            ->table('members')
+            ->where('agentcode', $code)
+            ->orderBy('registration_date', 'desc')
+            ->paginate(20);
+
+        return $members;
+    }
+
     public function enumerators(Request $request)
     {
         $query = Enumerator::query();
