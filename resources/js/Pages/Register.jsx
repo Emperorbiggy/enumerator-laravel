@@ -25,6 +25,9 @@ export default function Register() {
     const [banks, setBanks] = useState([]);
     const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [loadingLGAs, setLoadingLGAs] = useState(true);
+    const [loadingWards, setLoadingWards] = useState(false);
+    const [loadingPollingUnits, setLoadingPollingUnits] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [successData, setSuccessData] = useState(null);
@@ -45,6 +48,7 @@ export default function Register() {
 
     // Fetch LGAs
     const fetchLGAs = async () => {
+        setLoadingLGAs(true);
         try {
             const response = await fetch('/api/enumerator/lgas');
             const data = await response.json();
@@ -53,6 +57,8 @@ export default function Register() {
             }
         } catch (error) {
             console.error('Error fetching LGAs:', error);
+        } finally {
+            setLoadingLGAs(false);
         }
     };
 
@@ -90,6 +96,7 @@ export default function Register() {
         setPollingUnits([]);
 
         if (lga) {
+            setLoadingWards(true);
             try {
                 const response = await fetch(`/api/enumerator/wards?lga=${encodeURIComponent(lga)}`);
                 const data = await response.json();
@@ -98,6 +105,8 @@ export default function Register() {
                 }
             } catch (error) {
                 console.error('Error fetching wards:', error);
+            } finally {
+                setLoadingWards(false);
             }
         }
     };
@@ -109,6 +118,7 @@ export default function Register() {
         setPollingUnits([]);
 
         if (ward) {
+            setLoadingPollingUnits(true);
             try {
                 const response = await fetch(`/api/enumerator/polling-units?ward=${encodeURIComponent(ward)}`);
                 const data = await response.json();
@@ -117,6 +127,8 @@ export default function Register() {
                 }
             } catch (error) {
                 console.error('Error fetching polling units:', error);
+            } finally {
+                setLoadingPollingUnits(false);
             }
         }
     };
@@ -434,19 +446,29 @@ export default function Register() {
                                             <i className="fas fa-city text-yellow-400 mr-2"></i>
                                             Local Government <span className="text-red-500">*</span>
                                         </label>
-                                        <select
-                                            name="lga"
-                                            value={formData.lga}
-                                            onChange={handleLGAChange}
-                                            className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 ${errors.lga ? 'border-red-500' : 'border-gray-300'}`}
-                                        >
-                                            <option value="">Select Local Government</option>
-                                            {lgas.map((lga) => (
-                                                <option key={lga.id} value={lga.name}>
-                                                    {lga.name}
+                                        <div className="relative">
+                                            <select
+                                                name="lga"
+                                                value={formData.lga}
+                                                onChange={handleLGAChange}
+                                                className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 ${errors.lga ? 'border-red-500' : 'border-gray-300'} ${loadingLGAs ? 'bg-gray-50' : ''}`}
+                                                disabled={loadingLGAs}
+                                            >
+                                                <option value="">
+                                                    {loadingLGAs ? 'Loading LGAs...' : 'Select Local Government'}
                                                 </option>
-                                            ))}
-                                        </select>
+                                                {lgas.map((lga) => (
+                                                    <option key={lga.id} value={lga.name}>
+                                                        {lga.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {loadingLGAs && (
+                                                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                                    <div className="w-5 h-5 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+                                                </div>
+                                            )}
+                                        </div>
                                         {errors.lga && <p className="text-red-500 text-sm mt-1">{errors.lga}</p>}
                                     </div>
 
@@ -456,20 +478,29 @@ export default function Register() {
                                             <i className="fas fa-map-pin text-yellow-400 mr-2"></i>
                                             Ward <span className="text-red-500">*</span>
                                         </label>
-                                        <select
-                                            name="ward"
-                                            value={formData.ward}
-                                            onChange={handleWardChange}
-                                            className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 ${errors.ward ? 'border-red-500' : 'border-gray-300'}`}
-                                            disabled={!formData.lga}
-                                        >
-                                            <option value="">Select LGA first</option>
-                                            {wards.map((ward) => (
-                                                <option key={ward.id} value={ward.name}>
-                                                    {ward.name}
+                                        <div className="relative">
+                                            <select
+                                                name="ward"
+                                                value={formData.ward}
+                                                onChange={handleWardChange}
+                                                className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 ${errors.ward ? 'border-red-500' : 'border-gray-300'} ${loadingWards ? 'bg-gray-50' : ''}`}
+                                                disabled={!formData.lga || loadingWards}
+                                            >
+                                                <option value="">
+                                                    {loadingWards ? 'Loading Wards...' : (!formData.lga ? 'Select LGA first' : 'Select Ward')}
                                                 </option>
-                                            ))}
-                                        </select>
+                                                {wards.map((ward) => (
+                                                    <option key={ward.id} value={ward.name}>
+                                                        {ward.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {loadingWards && (
+                                                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                                    <div className="w-5 h-5 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+                                                </div>
+                                            )}
+                                        </div>
                                         {errors.ward && <p className="text-red-500 text-sm mt-1">{errors.ward}</p>}
                                     </div>
 
@@ -479,20 +510,29 @@ export default function Register() {
                                             <i className="fas fa-school text-yellow-400 mr-2"></i>
                                             Polling Unit <span className="text-red-500">*</span>
                                         </label>
-                                        <select
-                                            name="polling_unit"
-                                            value={formData.polling_unit}
-                                            onChange={handleInputChange}
-                                            className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 bg-white ${errors.polling_unit ? 'border-red-500' : 'border-gray-300'}`}
-                                            disabled={!formData.ward}
-                                        >
-                                            <option value="">Select Ward first</option>
-                                            {pollingUnits.map((pu) => (
-                                                <option key={pu.id} value={pu.name}>
-                                                    {pu.name}
+                                        <div className="relative">
+                                            <select
+                                                name="polling_unit"
+                                                value={formData.polling_unit}
+                                                onChange={handleInputChange}
+                                                className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:border-yellow-400 bg-white ${errors.polling_unit ? 'border-red-500' : 'border-gray-300'} ${loadingPollingUnits ? 'bg-gray-50' : ''}`}
+                                                disabled={!formData.ward || loadingPollingUnits}
+                                            >
+                                                <option value="">
+                                                    {loadingPollingUnits ? 'Loading Polling Units...' : (!formData.ward ? 'Select Ward first' : 'Select Polling Unit')}
                                                 </option>
-                                            ))}
-                                        </select>
+                                                {pollingUnits.map((pu) => (
+                                                    <option key={pu.id} value={pu.name}>
+                                                        {pu.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {loadingPollingUnits && (
+                                                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                                    <div className="w-5 h-5 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
+                                                </div>
+                                            )}
+                                        </div>
                                         {errors.polling_unit && <p className="text-red-500 text-sm mt-1">{errors.polling_unit}</p>}
                                         <p className="text-yellow-700 text-sm mt-2">Select your assigned polling unit</p>
                                     </div>
