@@ -16,29 +16,53 @@ class EnumeratorDataService
      */
     public function getLGAs(): array
     {
-        return Cache::remember('lgas', self::CACHE_TTL, function () {
+        $startTime = microtime(true);
+        
+        return Cache::remember('lgas', self::CACHE_TTL, function () use ($startTime) {
             try {
                 $baseUrl = Config::get('services.pu_api.url');
                 $url = "{$baseUrl}/api/lgas";
                 
-                Log::info('Fetching LGAs from external API', ['url' => $url]);
+                Log::info('DataService: Fetching LGAs from external API', [
+                    'url' => $url,
+                    'cache_hit' => false,
+                    'timestamp' => now()->toISOString()
+                ]);
                 
                 $response = Http::timeout(30)->get($url);
                 
                 if ($response->successful()) {
                     $data = $response->json();
-                    Log::info('Successfully fetched LGAs', ['count' => count($data)]);
+                    $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+                    
+                    Log::info('DataService: Successfully fetched LGAs', [
+                        'count' => is_array($data) ? count($data) : 0,
+                        'response_time_ms' => $responseTime,
+                        'status_code' => $response->status(),
+                        'timestamp' => now()->toISOString()
+                    ]);
                     return $data;
                 } else {
-                    Log::error('Failed to fetch LGAs', [
+                    $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+                    
+                    Log::error('DataService: Failed to fetch LGAs', [
                         'status' => $response->status(),
-                        'response' => $response->body()
+                        'response_time_ms' => $responseTime,
+                        'response_body' => $response->body(),
+                        'timestamp' => now()->toISOString()
                     ]);
                     return [];
                 }
             } catch (\Exception $e) {
-                Log::error('Exception while fetching LGAs', [
-                    'error' => $e->getMessage()
+                $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+                
+                Log::error('DataService: Exception while fetching LGAs', [
+                    'error_message' => $e->getMessage(),
+                    'error_code' => $e->getCode(),
+                    'error_file' => $e->getFile(),
+                    'error_line' => $e->getLine(),
+                    'response_time_ms' => $responseTime,
+                    'timestamp' => now()->toISOString()
                 ]);
                 return [];
             }
@@ -50,47 +74,71 @@ class EnumeratorDataService
      */
     public function getWardsByLGA(string $lgaName): array
     {
-        return Cache::remember("wards_{$lgaName}", self::CACHE_TTL, function () use ($lgaName) {
+        $startTime = microtime(true);
+        
+        return Cache::remember("wards_{$lgaName}", self::CACHE_TTL, function () use ($lgaName, $startTime) {
             try {
                 // First get the LGA ID by name
                 $lgaId = $this->getLGAIdByName($lgaName);
                 
                 if (!$lgaId) {
-                    Log::warning('LGA not found', ['lga_name' => $lgaName]);
+                    Log::warning('DataService: LGA not found', [
+                        'lga_name' => $lgaName,
+                        'timestamp' => now()->toISOString()
+                    ]);
                     return [];
                 }
 
                 $baseUrl = Config::get('services.pu_api.url');
                 $url = "{$baseUrl}/api/wards-by-lga/{$lgaId}";
                 
-                Log::info('Fetching wards from external API', [
+                Log::info('DataService: Fetching wards from external API', [
                     'url' => $url,
                     'lga_id' => $lgaId,
-                    'lga_name' => $lgaName
+                    'lga_name' => $lgaName,
+                    'cache_hit' => false,
+                    'timestamp' => now()->toISOString()
                 ]);
                 
                 $response = Http::timeout(30)->get($url);
                 
                 if ($response->successful()) {
                     $data = $response->json();
-                    Log::info('Successfully fetched wards', [
+                    $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+                    
+                    Log::info('DataService: Successfully fetched wards', [
                         'lga_name' => $lgaName,
-                        'count' => count($data)
+                        'lga_id' => $lgaId,
+                        'count' => is_array($data) ? count($data) : 0,
+                        'response_time_ms' => $responseTime,
+                        'status_code' => $response->status(),
+                        'timestamp' => now()->toISOString()
                     ]);
                     return $data;
                 } else {
-                    Log::error('Failed to fetch wards', [
+                    $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+                    
+                    Log::error('DataService: Failed to fetch wards', [
                         'lga_name' => $lgaName,
                         'lga_id' => $lgaId,
                         'status' => $response->status(),
-                        'response' => $response->body()
+                        'response_time_ms' => $responseTime,
+                        'response_body' => $response->body(),
+                        'timestamp' => now()->toISOString()
                     ]);
                     return [];
                 }
             } catch (\Exception $e) {
-                Log::error('Exception while fetching wards', [
+                $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+                
+                Log::error('DataService: Exception while fetching wards', [
                     'lga_name' => $lgaName,
-                    'error' => $e->getMessage()
+                    'error_message' => $e->getMessage(),
+                    'error_code' => $e->getCode(),
+                    'error_file' => $e->getFile(),
+                    'error_line' => $e->getLine(),
+                    'response_time_ms' => $responseTime,
+                    'timestamp' => now()->toISOString()
                 ]);
                 return [];
             }
@@ -102,47 +150,71 @@ class EnumeratorDataService
      */
     public function getPollingUnitsByWard(string $wardName): array
     {
-        return Cache::remember("polling_units_{$wardName}", self::CACHE_TTL, function () use ($wardName) {
+        $startTime = microtime(true);
+        
+        return Cache::remember("polling_units_{$wardName}", self::CACHE_TTL, function () use ($wardName, $startTime) {
             try {
                 // First get the ward ID by name
                 $wardId = $this->getWardIdByName($wardName);
                 
                 if (!$wardId) {
-                    Log::warning('Ward not found', ['ward_name' => $wardName]);
+                    Log::warning('DataService: Ward not found', [
+                        'ward_name' => $wardName,
+                        'timestamp' => now()->toISOString()
+                    ]);
                     return [];
                 }
 
                 $baseUrl = Config::get('services.pu_api.url');
                 $url = "{$baseUrl}/api/polling-units-by-ward/{$wardId}";
                 
-                Log::info('Fetching polling units from external API', [
+                Log::info('DataService: Fetching polling units from external API', [
                     'url' => $url,
                     'ward_id' => $wardId,
-                    'ward_name' => $wardName
+                    'ward_name' => $wardName,
+                    'cache_hit' => false,
+                    'timestamp' => now()->toISOString()
                 ]);
                 
                 $response = Http::timeout(30)->get($url);
                 
                 if ($response->successful()) {
                     $data = $response->json();
-                    Log::info('Successfully fetched polling units', [
+                    $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+                    
+                    Log::info('DataService: Successfully fetched polling units', [
                         'ward_name' => $wardName,
-                        'count' => count($data)
+                        'ward_id' => $wardId,
+                        'count' => is_array($data) ? count($data) : 0,
+                        'response_time_ms' => $responseTime,
+                        'status_code' => $response->status(),
+                        'timestamp' => now()->toISOString()
                     ]);
                     return $data;
                 } else {
-                    Log::error('Failed to fetch polling units', [
+                    $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+                    
+                    Log::error('DataService: Failed to fetch polling units', [
                         'ward_name' => $wardName,
                         'ward_id' => $wardId,
                         'status' => $response->status(),
-                        'response' => $response->body()
+                        'response_time_ms' => $responseTime,
+                        'response_body' => $response->body(),
+                        'timestamp' => now()->toISOString()
                     ]);
                     return [];
                 }
             } catch (\Exception $e) {
-                Log::error('Exception while fetching polling units', [
+                $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+                
+                Log::error('DataService: Exception while fetching polling units', [
                     'ward_name' => $wardName,
-                    'error' => $e->getMessage()
+                    'error_message' => $e->getMessage(),
+                    'error_code' => $e->getCode(),
+                    'error_file' => $e->getFile(),
+                    'error_line' => $e->getLine(),
+                    'response_time_ms' => $responseTime,
+                    'timestamp' => now()->toISOString()
                 ]);
                 return [];
             }

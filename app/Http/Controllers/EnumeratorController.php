@@ -24,13 +24,42 @@ class EnumeratorController extends Controller
      */
     public function getLGAs()
     {
+        $startTime = microtime(true);
+        
+        Log::info('LGA Fetch Request Started', [
+            'ip' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+            'timestamp' => now()->toISOString()
+        ]);
+
         try {
             $lgas = $this->dataService->getLGAs();
+            
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::info('LGA Fetch Successful', [
+                'lgas_count' => is_array($lgas) ? count($lgas) : 0,
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
             return response()->json([
                 'success' => true,
                 'data' => $lgas
             ]);
+            
         } catch (\Exception $e) {
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::error('LGA Fetch Failed', [
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch LGAs'
@@ -43,11 +72,25 @@ class EnumeratorController extends Controller
      */
     public function getWardsByLGA(Request $request)
     {
+        $startTime = microtime(true);
+        
+        Log::info('Wards Fetch Request Started', [
+            'lga' => $request->lga,
+            'ip' => request()->ip(),
+            'timestamp' => now()->toISOString()
+        ]);
+
         $validator = Validator::make($request->all(), [
             'lga' => 'required|string'
         ]);
 
         if ($validator->fails()) {
+            Log::warning('Wards Fetch Validation Failed', [
+                'lga' => $request->lga,
+                'errors' => $validator->errors()->toArray(),
+                'timestamp' => now()->toISOString()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'LGA name is required'
@@ -56,12 +99,34 @@ class EnumeratorController extends Controller
 
         try {
             $wards = $this->dataService->getWardsByLGA($request->lga);
+            
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::info('Wards Fetch Successful', [
+                'lga' => $request->lga,
+                'wards_count' => is_array($wards) ? count($wards) : 0,
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
 
             return response()->json([
                 'success' => true,
                 'data' => $wards
             ]);
+            
         } catch (\Exception $e) {
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::error('Wards Fetch Failed', [
+                'lga' => $request->lga,
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch wards'
@@ -74,11 +139,25 @@ class EnumeratorController extends Controller
      */
     public function getPollingUnitsByWard(Request $request)
     {
+        $startTime = microtime(true);
+        
+        Log::info('Polling Units Fetch Request Started', [
+            'ward' => $request->ward,
+            'ip' => request()->ip(),
+            'timestamp' => now()->toISOString()
+        ]);
+
         $validator = Validator::make($request->all(), [
             'ward' => 'required|string'
         ]);
 
         if ($validator->fails()) {
+            Log::warning('Polling Units Fetch Validation Failed', [
+                'ward' => $request->ward,
+                'errors' => $validator->errors()->toArray(),
+                'timestamp' => now()->toISOString()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Ward name is required'
@@ -87,12 +166,34 @@ class EnumeratorController extends Controller
 
         try {
             $pollingUnits = $this->dataService->getPollingUnitsByWard($request->ward);
+            
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::info('Polling Units Fetch Successful', [
+                'ward' => $request->ward,
+                'polling_units_count' => is_array($pollingUnits) ? count($pollingUnits) : 0,
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
 
             return response()->json([
                 'success' => true,
                 'data' => $pollingUnits
             ]);
+            
         } catch (\Exception $e) {
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::error('Polling Units Fetch Failed', [
+                'ward' => $request->ward,
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch polling units'

@@ -291,7 +291,7 @@ export default function Register() {
 
     return (
         <>
-            <Head title="Enumerator Registration - Accord Party" />
+            <Head title="Enumerator Registration" />
             
             <div className="min-h-screen bg-gradient-to-br from-yellow-300 to-yellow-400">
                 <div className="container mx-auto px-4 py-8 max-w-6xl">

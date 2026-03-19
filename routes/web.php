@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\EnumeratorController;
 use App\Http\Controllers\PaystackController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\ExternalMembersController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -46,6 +47,14 @@ Route::prefix('api/enumerator')->group(function () {
 Route::prefix('api/paystack')->group(function () {
     Route::get('/banks', [PaystackController::class, 'listBanks']);
     Route::get('/resolve-account', [PaystackController::class, 'resolveAccount']);
+});
+
+// External Members API routes
+Route::prefix('api/external-members')->group(function () {
+    Route::get('/', [ExternalMembersController::class, 'index']);
+    Route::get('/statistics', [ExternalMembersController::class, 'statistics']);
+    Route::get('/test-connection', [ExternalMembersController::class, 'testConnection']);
+    Route::get('/{id}', [ExternalMembersController::class, 'show']);
 });
 
 Route::middleware('auth')->group(function () {
