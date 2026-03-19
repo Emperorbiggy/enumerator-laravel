@@ -32,6 +32,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/enumerators', [AdminController::class, 'enumerators'])->name('enumerators');
         Route::get('/enumerator-performance', [AdminController::class, 'enumeratorPerformance'])->name('enumerator.performance');
         Route::get('/enumerator/{code}/members', [AdminController::class, 'showEnumeratorMembers'])->name('enumerator.members');
+        Route::get('/data-plan-management', [AdminController::class, 'dataPlanManagement'])->name('data.plan.management');
         Route::get('/enumerators/{enumerator}', [AdminController::class, 'showEnumerator'])->name('enumerators.show');
     });
 });

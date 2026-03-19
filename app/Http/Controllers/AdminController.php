@@ -446,6 +446,143 @@ class AdminController extends Controller
         return $members;
     }
 
+    /**
+     * Show data plan management page for multi-registrations
+     */
+    public function dataPlanManagement(Request $request)
+    {
+        $startTime = microtime(true);
+        
+        Log::info('Admin: Data Plan Management Request Started', [
+            'ip' => $request->ip(),
+            'timestamp' => now()->toISOString()
+        ]);
+
+        try {
+            // Get people with more than 2 registrations (using browsing_number as identifier)
+            $multiRegistrations = $this->getMultiRegistrations();
+            
+            // Get unique networks from the data
+            $networks = $multiRegistrations->pluck('browsing_network')->unique()->filter()->values();
+            
+            // Get selected network from request
+            $selectedNetwork = $request->get('network', '');
+            $filteredRegistrations = collect();
+            
+            if ($selectedNetwork && $networks->contains($selectedNetwork)) {
+                $filteredRegistrations = $multiRegistrations->where('browsing_network', $selectedNetwork);
+            } else {
+                $filteredRegistrations = $multiRegistrations;
+            }
+
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::info('Admin: Data Plan Management Successful', [
+                'total_multi_registrations' => $multiRegistrations->count(),
+                'selected_network' => $selectedNetwork,
+                'filtered_count' => $filteredRegistrations->count(),
+                'available_networks' => $networks->toArray(),
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            return Inertia::render('Admin/DataPlanManagement', [
+                'multiRegistrations' => $multiRegistrations,
+                'filteredRegistrations' => $filteredRegistrations,
+                'networks' => $networks,
+                'selectedNetwork' => $selectedNetwork,
+                'stats' => [
+                    'total_multi_registrations' => $multiRegistrations->count(),
+                    'unique_networks' => $networks->count(),
+                    'filtered_count' => $filteredRegistrations->count(),
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::error('Admin: Data Plan Management Failed', [
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            abort(500, 'Failed to load data plan management page');
+        }
+    }
+
+    /**
+     * Get people with more than 2 registrations
+     */
+    private function getMultiRegistrations()
+    {
+        try {
+            // Use relationship first if permissions allow
+            try {
+                $multiRegistrations = Enumerator::select('browsing_network', 'browsing_number')
+                    ->selectRaw('COUNT(*) as registration_count')
+                    ->selectRaw('GROUP_CONCAT(full_name) as names')
+                    ->selectRaw('GROUP_CONCAT(email) as emails')
+                    ->selectRaw('GROUP_CONCAT(whatsapp) as whatsapp_numbers')
+                    ->selectRaw('GROUP_CONCAT(code) as codes')
+                    ->selectRaw('MIN(registered_at) as first_registration')
+                    ->selectRaw('MAX(registered_at) as last_registration')
+                    ->whereNotNull('browsing_number')
+                    ->where('browsing_number', '!=', '')
+                    ->groupBy('browsing_number', 'browsing_network')
+                    ->having('registration_count', '>', 2)
+                    ->orderBy('registration_count', 'desc')
+                    ->get();
+            } catch (\Exception $relationError) {
+                Log::warning('Admin: Using direct connection for multi-registrations', [
+                    'error' => $relationError->getMessage()
+                ]);
+
+                // Fallback: Use direct database connection
+                $multiRegistrations = DB::table('enumerators')
+                    ->select('browsing_network', 'browsing_number')
+                    ->selectRaw('COUNT(*) as registration_count')
+                    ->selectRaw('GROUP_CONCAT(full_name) as names')
+                    ->selectRaw('GROUP_CONCAT(email) as emails')
+                    ->selectRaw('GROUP_CONCAT(whatsapp) as whatsapp_numbers')
+                    ->selectRaw('GROUP_CONCAT(code) as codes')
+                    ->selectRaw('MIN(registered_at) as first_registration')
+                    ->selectRaw('MAX(registered_at) as last_registration')
+                    ->whereNotNull('browsing_number')
+                    ->where('browsing_number', '!=', '')
+                    ->groupBy('browsing_number', 'browsing_network')
+                    ->having('registration_count', '>', 2)
+                    ->orderBy('registration_count', 'desc')
+                    ->get();
+            }
+
+            // Transform the data for better UI display
+            return $multiRegistrations->map(function ($item) {
+                return [
+                    'browsing_number' => $item->browsing_number,
+                    'browsing_network' => $item->browsing_network,
+                    'registration_count' => (int) $item->registration_count,
+                    'names' => explode(',', $item->names),
+                    'emails' => explode(',', $item->emails),
+                    'whatsapp_numbers' => explode(',', $item->whatsapp_numbers),
+                    'codes' => explode(',', $item->codes),
+                    'first_registration' => $item->first_registration,
+                    'last_registration' => $item->last_registration,
+                    'selected' => false,
+                ];
+            });
+
+        } catch (\Exception $e) {
+            Log::error('Admin: Failed to get multi-registrations', [
+                'error' => $e->getMessage()
+            ]);
+            return collect();
+        }
+    }
+
     public function enumerators(Request $request)
     {
         $query = Enumerator::query();
