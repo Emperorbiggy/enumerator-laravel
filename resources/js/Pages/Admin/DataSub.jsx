@@ -107,13 +107,14 @@ export default function DataSub() {
     };
 
     // Filter performers based on search and network
-    const filteredData = topPerformers.filter(performer => {
-        const matchesSearch = searchTerm === '' || 
+    const filteredPerformersList = filteredPerformers.filter(performer => {
+        const matchesSearch = !searchTerm || 
             performer.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             performer.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
             performer.email.toLowerCase().includes(searchTerm.toLowerCase());
         
-        const matchesNetwork = !selectedNetworkLocal || performer.browsing_network === selectedNetworkLocal;
+        const matchesNetwork = !selectedNetworkLocal || 
+            (performer.browsing_network && performer.browsing_network.toLowerCase() === selectedNetworkLocal.toLowerCase());
         
         return matchesSearch && matchesNetwork;
     });

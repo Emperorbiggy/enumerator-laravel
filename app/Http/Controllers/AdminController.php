@@ -539,15 +539,21 @@ class AdminController extends Controller
             // Get top performers with more than 2 members
             $topPerformers = $this->getTopPerformersForDataSub();
             
-            // Get unique networks from the data
-            $networks = $topPerformers->pluck('browsing_network')->unique()->filter()->values();
+            // Get unique networks from the data (case-insensitive)
+            $networks = $topPerformers->pluck('browsing_network')
+                ->map(fn($network) => strtolower($network ?? ''))
+                ->unique()
+                ->filter()
+                ->values();
             
-            // Get selected network from request
-            $selectedNetwork = $request->get('network', '');
+            // Get selected network from request (convert to lowercase)
+            $selectedNetwork = strtolower($request->get('network', ''));
             $filteredPerformers = collect();
             
             if ($selectedNetwork && $networks->contains($selectedNetwork)) {
-                $filteredPerformers = $topPerformers->where('browsing_network', $selectedNetwork);
+                $filteredPerformers = $topPerformers->filter(function($performer) use ($selectedNetwork) {
+                    return strtolower($performer->browsing_network ?? '') === $selectedNetwork;
+                });
             } else {
                 $filteredPerformers = $topPerformers;
             }
@@ -675,15 +681,21 @@ class AdminController extends Controller
             // Get people with more than 2 registrations (using browsing_number as identifier)
             $multiRegistrations = $this->getMultiRegistrations();
             
-            // Get unique networks from the data
-            $networks = $multiRegistrations->pluck('browsing_network')->unique()->filter()->values();
+            // Get unique networks from the data (case-insensitive)
+            $networks = $multiRegistrations->pluck('browsing_network')
+                ->map(fn($network) => strtolower($network ?? ''))
+                ->unique()
+                ->filter()
+                ->values();
             
-            // Get selected network from request
-            $selectedNetwork = $request->get('network', '');
+            // Get selected network from request (convert to lowercase)
+            $selectedNetwork = strtolower($request->get('network', ''));
             $filteredRegistrations = collect();
             
             if ($selectedNetwork && $networks->contains($selectedNetwork)) {
-                $filteredRegistrations = $multiRegistrations->where('browsing_network', $selectedNetwork);
+                $filteredRegistrations = $multiRegistrations->filter(function($registration) use ($selectedNetwork) {
+                    return strtolower($registration->browsing_network ?? '') === $selectedNetwork;
+                });
             } else {
                 $filteredRegistrations = $multiRegistrations;
             }
@@ -1046,11 +1058,13 @@ class AdminController extends Controller
 
             foreach ($eligiblePerformers as $performer) {
                 try {
-                    $phone = $performer->browsing_number;
+                    $phone = $this->normalizePhoneNumber($performer->browsing_number);
                     
-                    if (empty($phone)) {
-                        Log::warning('Performer has no phone number', [
+                    if (empty($phone) || strlen($phone) !== 11) {
+                        Log::warning('Performer has invalid phone number after normalization', [
                             'performer_id' => $performer->id,
+                            'original_phone' => $performer->browsing_number,
+                            'normalized_phone' => $phone,
                             'code' => $performer->code
                         ]);
                         continue;
@@ -1075,7 +1089,7 @@ class AdminController extends Controller
                     // Create subscription record
                     $subscription = new DataSubscription();
                     $subscription->transaction_id = $responseData['data']['transactionId'] ?? uniqid('txn_');
-                    $subscription->phone = $phone;
+                    $subscription->phone = $phone; // Use normalized phone number
                     $subscription->plan_code = $planCode;
                     $subscription->plan_name = $responseData['data']['planName'] ?? 'Unknown';
                     $subscription->network = $responseData['data']['network'] ?? $network;
@@ -1120,6 +1134,7 @@ class AdminController extends Controller
                     $results[] = [
                         'performer_id' => $performer->id,
                         'phone' => $phone,
+                        'original_phone' => $performer->browsing_number,
                         'success' => $responseData['success'],
                         'message' => $responseData['message'] ?? 'Unknown error',
                         'transaction_id' => $subscription->transaction_id,
@@ -1308,5 +1323,33 @@ class AdminController extends Controller
         }
         
         return (float) $amount;
+    }
+
+    /**
+     * Normalize phone number to 11-digit format
+     */
+    private function normalizePhoneNumber($phone)
+    {
+        if (empty($phone)) {
+            return $phone;
+        }
+
+        // Remove all non-digit characters first
+        $phone = preg_replace('/[^0-9]/', '', $phone);
+
+        // Handle different formats
+        if (strlen($phone) === 13 && strpos($phone, '234') === 0) {
+            // +2349139986596 or 2349139986596 → 09139986596
+            return '0' . substr($phone, 3);
+        } elseif (strlen($phone) === 11 && strpos($phone, '0') === 0) {
+            // Already in correct format (09139986596)
+            return $phone;
+        } elseif (strlen($phone) === 10) {
+            // 9139986596 → 09139986596 (add leading 0)
+            return '0' . $phone;
+        }
+
+        // Return original if format doesn't match expected patterns
+        return $phone;
     }
 }
