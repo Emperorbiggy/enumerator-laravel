@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Admin;
+use App\Models\DataSubscription;
 use App\Models\Enumerator;
 use App\Models\ExternalMember;
 use Illuminate\Http\Request;
@@ -846,5 +847,204 @@ class AdminController extends Controller
         return Inertia::render('Admin/EnumeratorDetails', [
             'enumerator' => $enumerator,
         ]);
+    }
+
+    /**
+     * Send batch data to selected enumerators
+     */
+    public function sendBatchData(Request $request)
+    {
+        $startTime = microtime(true);
+        
+        try {
+            $validated = $request->validate([
+                'performer_ids' => 'required|array',
+                'performer_ids.*' => 'integer|exists:enumerators,id',
+                'plan_code' => 'required|string',
+                'network' => 'required|string',
+            ]);
+
+            $performerIds = $validated['performer_ids'];
+            $planCode = $validated['plan_code'];
+            $network = $validated['network'];
+
+            Log::info('Batch data send started', [
+                'performer_count' => count($performerIds),
+                'plan_code' => $planCode,
+                'network' => $network,
+                'admin_id' => Auth::guard('admin')->id(),
+                'timestamp' => now()->toISOString()
+            ]);
+
+            // Get selected performers
+            $performers = Enumerator::whereIn('id', $performerIds)->get();
+            
+            if ($performers->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No valid performers found'
+                ], 400);
+            }
+
+            // Initialize API client
+            $apiUrl = env('DATA_URL') . '/api/data';
+            $apiToken = env('DATA_API');
+            
+            if (empty($apiUrl) || empty($apiToken)) {
+                Log::error('API configuration missing for batch send');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'API configuration missing'
+                ], 500);
+            }
+
+            $client = new \GuzzleHttp\Client([
+                'timeout' => 30,
+                'headers' => [
+                    'accept' => 'application/json',
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'Content-Type' => 'application/json',
+                ],
+            ]);
+
+            $results = [];
+            $successCount = 0;
+            $failedCount = 0;
+
+            // Process each performer
+            foreach ($performers as $performer) {
+                try {
+                    $phone = $performer->browsing_number;
+                    
+                    if (empty($phone)) {
+                        Log::warning('Performer has no phone number', [
+                            'performer_id' => $performer->id,
+                            'code' => $performer->code
+                        ]);
+                        continue;
+                    }
+
+                    // Make API call
+                    $response = $client->post($apiUrl, [
+                        'json' => [
+                            'plan_code' => $planCode,
+                            'phone' => $phone
+                        ]
+                    ]);
+
+                    $responseData = json_decode($response->getBody()->getContents(), true);
+
+                    // Create subscription record
+                    $subscription = DataSubscription::create([
+                        'transaction_id' => $responseData['data']['transactionId'] ?? uniqid('txn_'),
+                        'phone' => $phone,
+                        'plan_code' => $planCode,
+                        'plan_name' => $responseData['data']['planName'] ?? 'Unknown',
+                        'network' => $responseData['data']['network'] ?? $network,
+                        'plan_type' => $responseData['data']['planType'] ?? 'Unknown',
+                        'amount' => $responseData['data']['amount'] ?? 0,
+                        'balance_before' => $responseData['data']['balanceBefore'] ?? 0,
+                        'balance_after' => $responseData['data']['balanceAfter'] ?? 0,
+                        'response_message' => $responseData['data']['response'] ?? 'Success',
+                        'status' => $responseData['success'] ? 'success' : 'failed',
+                        'full_response' => $responseData,
+                        'enumerator_id' => $performer->id,
+                        'admin_id' => Auth::guard('admin')->id(),
+                    ]);
+
+                    if ($responseData['success']) {
+                        $successCount++;
+                        Log::info('Data sent successfully', [
+                            'performer_id' => $performer->id,
+                            'phone' => $phone,
+                            'transaction_id' => $subscription->transaction_id
+                        ]);
+                    } else {
+                        $failedCount++;
+                        Log::warning('Data send failed', [
+                            'performer_id' => $performer->id,
+                            'phone' => $phone,
+                            'response' => $responseData
+                        ]);
+                    }
+
+                    $results[] = [
+                        'performer_id' => $performer->id,
+                        'phone' => $phone,
+                        'success' => $responseData['success'],
+                        'message' => $responseData['message'] ?? 'Unknown error',
+                        'transaction_id' => $subscription->transaction_id,
+                    ];
+
+                } catch (\Exception $e) {
+                    $failedCount++;
+                    
+                    // Create failed record
+                    DataSubscription::create([
+                        'transaction_id' => uniqid('failed_'),
+                        'phone' => $performer->browsing_number ?? 'Unknown',
+                        'plan_code' => $planCode,
+                        'plan_name' => 'Unknown',
+                        'network' => $network,
+                        'plan_type' => 'Unknown',
+                        'amount' => 0,
+                        'balance_before' => 0,
+                        'balance_after' => 0,
+                        'response_message' => $e->getMessage(),
+                        'status' => 'failed',
+                        'full_response' => ['error' => $e->getMessage()],
+                        'enumerator_id' => $performer->id,
+                        'admin_id' => Auth::guard('admin')->id(),
+                    ]);
+
+                    Log::error('Failed to send data to performer', [
+                        'performer_id' => $performer->id,
+                        'phone' => $performer->browsing_number,
+                        'error' => $e->getMessage()
+                    ]);
+
+                    $results[] = [
+                        'performer_id' => $performer->id,
+                        'phone' => $performer->browsing_number ?? 'Unknown',
+                        'success' => false,
+                        'message' => $e->getMessage(),
+                        'transaction_id' => null,
+                    ];
+                }
+            }
+
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+
+            Log::info('Batch data send completed', [
+                'total_performers' => $performers->count(),
+                'success_count' => $successCount,
+                'failed_count' => $failedCount,
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Batch processing completed. Success: {$successCount}, Failed: {$failedCount}",
+                'results' => $results,
+                'summary' => [
+                    'total' => $performers->count(),
+                    'success' => $successCount,
+                    'failed' => $failedCount,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Batch data send failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'timestamp' => now()->toISOString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Batch processing failed: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

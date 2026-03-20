@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, usePage, router } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 
 export default function DataSub() {
@@ -10,6 +10,7 @@ export default function DataSub() {
     const [selectAll, setSelectAll] = useState(false);
     const [externalDataState, setExternalDataState] = useState(externalData || null);
     const [selectedDataPlan, setSelectedDataPlan] = useState('');
+    const [isSending, setIsSending] = useState(false);
 
     // Handle network selection
     const handleNetworkChange = (network) => {
@@ -51,6 +52,44 @@ export default function DataSub() {
         return externalDataState.filter(plan => 
             plan.network && plan.network.toLowerCase() === selectedNetworkLocal.toLowerCase()
         );
+    };
+
+    // Handle send data
+    const handleSendData = async () => {
+        if (selectedItems.size === 0 || !selectedDataPlan || !selectedNetworkLocal) {
+            return;
+        }
+
+        setIsSending(true);
+
+        try {
+            const performerIds = Array.from(selectedItems);
+            
+            const response = await router.post('/admin/send-batch-data', {
+                performer_ids: performerIds,
+                plan_code: selectedDataPlan,
+                network: selectedNetworkLocal,
+            }, {
+                onSuccess: (page) => {
+                    alert('Data sent successfully!');
+                    setSelectedItems(new Set());
+                    setSelectAll(false);
+                    setSelectedDataPlan('');
+                },
+                onError: (errors) => {
+                    alert('Error sending data: ' + (errors.message || 'Unknown error'));
+                },
+                onFinish: () => {
+                    setIsSending(false);
+                },
+                preserveState: false,
+            });
+
+        } catch (error) {
+            console.error('Send data error:', error);
+            alert('Error sending data: ' + error.message);
+            setIsSending(false);
+        }
     };
 
     // Filter performers based on search and network
@@ -210,10 +249,11 @@ export default function DataSub() {
                                         {selectAll ? 'Deselect All' : 'Select All'}
                                     </button>
                                     <button
-                                        disabled={selectedItems.size === 0 || !selectedDataPlan}
+                                        onClick={handleSendData}
+                                        disabled={selectedItems.size === 0 || !selectedDataPlan || isSending}
                                         className="flex-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-md text-sm font-medium disabled:cursor-not-allowed"
                                     >
-                                        Send Data ({selectedItems.size})
+                                        {isSending ? 'Sending...' : `Send Data (${selectedItems.size})`}
                                     </button>
                                 </div>
                             </div>
