@@ -539,8 +539,99 @@ class AdminController extends Controller
             // Get top performers with more than 2 members
             $topPerformers = $this->getTopPerformersForDataSub();
             
+            // Apply eligibility checking to hide recently skipped performers
+            $eligiblePerformers = [];
+            $skippedPerformers = [];
+
+            foreach ($topPerformers as $performer) {
+                try {
+                    // Get member counts from external database only
+                    try {
+                        $currentRegisteredCount = DB::connection('external_mysql')
+                            ->table('members')
+                            ->where('agentcode', $performer->code)
+                            ->count();
+                        $dataSource = 'external';
+                    } catch (\Exception $memberException) {
+                        Log::error('External database not reachable', [
+                            'performer_id' => $performer->id,
+                            'error' => $memberException->getMessage()
+                        ]);
+
+                        // Skip this performer - no fallback for production
+                        $skippedPerformers[] = [
+                            'performer_id' => $performer->id,
+                            'phone' => $performer->browsing_number ?? 'Unknown',
+                            'reason' => 'external_database_unreachable',
+                            'error' => $memberException->getMessage()
+                        ];
+                        continue;
+                    }
+
+                    // Check if performer has any previous subscription (not just recent)
+                    $firstSubscription = DB::table('data_subscriptions')
+                        ->where('enumerator_id', $performer->id)
+                        ->where('status', 'success')
+                        ->orderBy('created_at', 'asc')
+                        ->first();
+
+                    if ($firstSubscription) {
+                        // Calculate target: initial registered count + 100
+                        $initialRegisteredCount = $firstSubscription->registered_users_count ?? 0;
+                        $targetCount = $initialRegisteredCount + 100;
+
+                        if ($currentRegisteredCount >= $targetCount) {
+                            // Eligible for new data subscription
+                            $performer->current_registered_count = $currentRegisteredCount;
+                            $performer->initial_registered_count = $initialRegisteredCount;
+                            $performer->target_count = $targetCount;
+                            $performer->growth = $currentRegisteredCount - $initialRegisteredCount;
+                            $performer->data_source = $dataSource;
+                            $eligiblePerformers[] = $performer;
+                        } else {
+                            // Not enough growth to reach target - skip from display
+                            $skippedPerformers[] = [
+                                'performer_id' => $performer->id,
+                                'phone' => $performer->browsing_number,
+                                'reason' => 'below_target_count',
+                                'initial_count' => $initialRegisteredCount,
+                                'current_count' => $currentRegisteredCount,
+                                'target_count' => $targetCount,
+                                'growth_needed' => $targetCount - $currentRegisteredCount
+                            ];
+                        }
+                    } else {
+                        // No previous subscription - eligible for first time
+                        $performer->current_registered_count = $currentRegisteredCount;
+                        $performer->initial_registered_count = $currentRegisteredCount;
+                        $performer->target_count = $currentRegisteredCount + 100;
+                        $performer->growth = 0;
+                        $performer->data_source = $dataSource;
+                        $eligiblePerformers[] = $performer;
+                    }
+
+                } catch (\Exception $e) {
+                    // Error processing this performer - skip
+                    $skippedPerformers[] = [
+                        'performer_id' => $performer->id,
+                        'phone' => $performer->browsing_number ?? 'Unknown',
+                        'reason' => 'processing_error',
+                        'error' => $e->getMessage()
+                    ];
+                }
+            }
+
+            Log::info('Data Sub eligibility check completed', [
+                'total_performers' => $topPerformers->count(),
+                'eligible_count' => count($eligiblePerformers),
+                'skipped_count' => count($skippedPerformers)
+            ]);
+
+            // Use only eligible performers for display
+            $displayPerformers = collect($eligiblePerformers);
+            
             // Get unique networks from the data (case-insensitive)
-            $networks = $topPerformers->pluck('browsing_network')
+            $networks = $displayPerformers->pluck('browsing_network')
                 ->map(fn($network) => strtolower($network ?? ''))
                 ->unique()
                 ->filter()
@@ -551,11 +642,11 @@ class AdminController extends Controller
             $filteredPerformers = collect();
             
             if ($selectedNetwork && $networks->contains($selectedNetwork)) {
-                $filteredPerformers = $topPerformers->filter(function($performer) use ($selectedNetwork) {
+                $filteredPerformers = $displayPerformers->filter(function($performer) use ($selectedNetwork) {
                     return strtolower($performer->browsing_network ?? '') === $selectedNetwork;
                 });
             } else {
-                $filteredPerformers = $topPerformers;
+                $filteredPerformers = $displayPerformers;
             }
 
             // Fetch external API data
@@ -564,7 +655,9 @@ class AdminController extends Controller
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
             
             Log::info('Admin: Data Sub Successful', [
-                'total_top_performers' => $topPerformers->count(),
+                'total_performers' => $topPerformers->count(),
+                'eligible_performers' => $displayPerformers->count(),
+                'skipped_performers' => count($skippedPerformers),
                 'selected_network' => $selectedNetwork,
                 'filtered_count' => $filteredPerformers->count(),
                 'available_networks' => $networks->toArray(),
@@ -574,13 +667,15 @@ class AdminController extends Controller
             ]);
 
             return Inertia::render('Admin/DataSub', [
-                'topPerformers' => $topPerformers,
+                'topPerformers' => $displayPerformers,
                 'filteredPerformers' => $filteredPerformers,
                 'networks' => $networks,
                 'selectedNetwork' => $selectedNetwork,
                 'externalData' => $externalData,
                 'stats' => [
                     'total_top_performers' => $topPerformers->count(),
+                    'eligible_performers' => $displayPerformers->count(),
+                    'skipped_performers' => count($skippedPerformers),
                     'unique_networks' => $networks->count(),
                     'filtered_count' => $filteredPerformers->count(),
                 ]
@@ -893,7 +988,7 @@ class AdminController extends Controller
                 'plan_code' => $planCode,
                 'network' => $network,
                 'admin_id' => Auth::guard('admin')->id(),
-                'estimated_time_minutes' => round((count($performerIds) * 2.5) / 60, 1), // ~2.5 seconds per performer
+                'estimated_time_minutes' => round((count($performerIds) * 10.5) / 60, 1), // ~10.5 seconds per performer (10s delay + processing)
                 'timestamp' => now()->toISOString()
             ]);
 
@@ -1084,7 +1179,7 @@ class AdminController extends Controller
                     // Check if we're approaching timeout
                     $elapsedTime = microtime(true) - $startTime;
                     $remainingTime = 600 - $elapsedTime; // 10 minutes limit
-                    $estimatedRemaining = (count($eligiblePerformers) - $index) * 2.5; // ~2.5 seconds per remaining performer
+                    $estimatedRemaining = (count($eligiblePerformers) - $index) * 10.5; // ~10.5 seconds per remaining performer
                     
                     if ($estimatedRemaining > $remainingTime) {
                         Log::warning('Approaching timeout, stopping early', [
@@ -1133,21 +1228,50 @@ class AdminController extends Controller
                         continue;
                     }
 
-                    // Add delay to respect API rate limits (2 seconds between calls)
+                    // Add delay to respect API rate limits (10 seconds between calls)
                     if ($results !== []) {
-                        Log::info('Delaying 2 seconds to respect API rate limit');
-                        sleep(2);
+                        Log::info('Delaying 10 seconds to respect API rate limit');
+                        sleep(10);
                     }
+
+                    // Validate API request data before sending
+                    $apiRequestData = [
+                        'plan_code' => $planCode,
+                        'phone' => $phone
+                    ];
+
+                    Log::info('Making API call', [
+                        'performer_id' => $performer->id,
+                        'phone' => $phone,
+                        'original_phone' => $performer->browsing_number,
+                        'plan_code' => $planCode,
+                        'network' => $network,
+                        'api_url' => $apiUrl,
+                        'request_data' => $apiRequestData
+                    ]);
 
                     // Make API call
                     $response = $client->post($apiUrl, [
-                        'json' => [
-                            'plan_code' => $planCode,
-                            'phone' => $phone
-                        ]
+                        'json' => $apiRequestData,
+                        'timeout' => 30,
+                        'connect_timeout' => 10
                     ]);
 
-                    $responseData = json_decode($response->getBody()->getContents(), true);
+                    $responseBody = $response->getBody()->getContents();
+                    $responseData = json_decode($responseBody, true);
+
+                    // Validate API response
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        throw new \Exception('Invalid JSON response from API: ' . json_last_error_msg());
+                    }
+
+                    Log::info('API response received', [
+                        'performer_id' => $performer->id,
+                        'phone' => $phone,
+                        'response_success' => $responseData['success'] ?? false,
+                        'response_message' => $responseData['message'] ?? 'No message',
+                        'http_status' => $response->getStatusCode()
+                    ]);
 
                     // Create subscription record
                     $subscription = new DataSubscription();
@@ -1213,9 +1337,42 @@ class AdminController extends Controller
                 } catch (\GuzzleHttp\Exception\ClientException $e) {
                     $failedCount++;
                     
-                    // Check if it's a rate limit error
+                    // Get detailed error response
                     $responseBody = $e->hasResponse() ? $e->getResponse()->getBody()->getContents() : '';
+                    $statusCode = $e->hasResponse() ? $e->getResponse()->getStatusCode() : 0;
                     $isRateLimit = strpos($responseBody, 'Please wait for') !== false;
+                    
+                    // Parse error response for more details
+                    $errorDetails = [];
+                    if (!empty($responseBody)) {
+                        try {
+                            $errorData = json_decode($responseBody, true);
+                            $errorDetails = [
+                                'success' => $errorData['success'] ?? false,
+                                'message' => $errorData['message'] ?? 'Unknown error',
+                                'data' => $errorData['data'] ?? [],
+                                'status_code' => $statusCode
+                            ];
+                        } catch (\Exception $jsonException) {
+                            $errorDetails = [
+                                'raw_response' => $responseBody,
+                                'status_code' => $statusCode,
+                                'parse_error' => $jsonException->getMessage()
+                            ];
+                        }
+                    }
+                    
+                    Log::error('Failed to send data to performer', [
+                        'performer_id' => $performer->id,
+                        'phone' => $phone,
+                        'original_phone' => $performer->browsing_number,
+                        'plan_code' => $planCode,
+                        'network' => $network,
+                        'status_code' => $statusCode,
+                        'error' => $e->getMessage(),
+                        'error_details' => $errorDetails,
+                        'rate_limit' => $isRateLimit
+                    ]);
                     
                     if ($isRateLimit) {
                         Log::warning('Rate limit encountered, waiting and retrying', [
@@ -1224,8 +1381,8 @@ class AdminController extends Controller
                             'error' => $e->getMessage()
                         ]);
                         
-                        // Wait 3 seconds and retry once
-                        sleep(3);
+                        // Wait 10 seconds and retry once
+                        sleep(10);
                         
                         try {
                             $retryResponse = $client->post($apiUrl, [
