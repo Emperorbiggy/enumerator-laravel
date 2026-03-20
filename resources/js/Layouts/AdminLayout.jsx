@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Head, Link, usePage } from '@inertiajs/react';
+import { ToastProvider } from '@/Components/ToastContainer';
 
 export default function AdminLayout({ children, title }) {
     const { url } = usePage();
@@ -134,7 +135,9 @@ export default function AdminLayout({ children, title }) {
 
                     {/* Main content area */}
                     <main className="flex-1 overflow-y-auto">
-                        {children}
+                        <ToastProvider>
+                            {children}
+                        </ToastProvider>
                     </main>
                 </div>
             </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Head, Link, usePage, router } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
+import { useToast } from '@/Components/ToastContainer';
 
 export default function DataSub() {
     const { topPerformers, filteredPerformers, networks, selectedNetwork, stats, externalData } = usePage().props;
@@ -11,6 +12,7 @@ export default function DataSub() {
     const [externalDataState, setExternalDataState] = useState(externalData || null);
     const [selectedDataPlan, setSelectedDataPlan] = useState('');
     const [isSending, setIsSending] = useState(false);
+    const { success, error } = useToast();
 
     // Handle network selection
     const handleNetworkChange = (network) => {
@@ -82,17 +84,17 @@ export default function DataSub() {
             const data = await response.json();
 
             if (data.success) {
-                alert(`Data sent successfully! ${data.message}`);
+                success(`Data sent successfully! ${data.message}`, 5000);
                 setSelectedItems(new Set());
                 setSelectAll(false);
                 setSelectedDataPlan('');
             } else {
-                alert('Error sending data: ' + data.message);
+                error('Error sending data: ' + data.message, 5000);
             }
 
-        } catch (error) {
-            console.error('Send data error:', error);
-            alert('Error sending data: ' + error.message);
+        } catch (err) {
+            console.error('Send data error:', err);
+            error('Error sending data: ' + err.message, 5000);
         } finally {
             setIsSending(false);
         }
