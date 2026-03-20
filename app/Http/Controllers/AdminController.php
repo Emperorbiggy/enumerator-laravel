@@ -929,68 +929,71 @@ class AdminController extends Controller
                         $dataSource = 'fallback';
                     }
 
-                    // Check if performer has recent subscription (last 7 days)
-                    $recentSubscription = DB::table('data_subscriptions')
+                    // Check if performer has any previous subscription (not just recent)
+                    $firstSubscription = DB::table('data_subscriptions')
                         ->where('enumerator_id', $performer->id)
                         ->where('status', 'success')
-                        ->where('created_at', '>=', now()->subDays(7))
-                        ->orderBy('created_at', 'desc')
+                        ->orderBy('created_at', 'asc')
                         ->first();
 
-                    if ($recentSubscription) {
-                        // Check if they've grown by at least 5 users since last subscription
-                        $lastRegisteredCount = $recentSubscription->registered_users_count ?? 0;
-                        $growth = $currentRegisteredCount - $lastRegisteredCount;
+                    if ($firstSubscription) {
+                        // Calculate target: initial registered count + 100
+                        $initialRegisteredCount = $firstSubscription->registered_users_count ?? 0;
+                        $targetCount = $initialRegisteredCount + 100;
 
-                        if ($growth >= 5) {
+                        if ($currentRegisteredCount >= $targetCount) {
                             // Eligible for new data subscription
                             $performer->current_registered_count = $currentRegisteredCount;
-                            $performer->last_registered_count = $lastRegisteredCount;
-                            $performer->growth = $growth;
+                            $performer->initial_registered_count = $initialRegisteredCount;
+                            $performer->target_count = $targetCount;
+                            $performer->growth = $currentRegisteredCount - $initialRegisteredCount;
                             $performer->data_source = $dataSource;
                             $eligiblePerformers[] = $performer;
 
                             Log::info('Performer eligible for data subscription', [
                                 'performer_id' => $performer->id,
                                 'phone' => $performer->browsing_number,
+                                'initial_count' => $initialRegisteredCount,
                                 'current_count' => $currentRegisteredCount,
-                                'last_count' => $lastRegisteredCount,
-                                'growth' => $growth,
-                                'last_subscription' => $recentSubscription->created_at
+                                'target_count' => $targetCount,
+                                'growth' => $currentRegisteredCount - $initialRegisteredCount,
+                                'first_subscription' => $firstSubscription->created_at
                             ]);
                         } else {
-                            // Not enough growth - skip
+                            // Not enough growth to reach target - skip
                             $skippedPerformers[] = [
                                 'performer_id' => $performer->id,
                                 'phone' => $performer->browsing_number,
-                                'reason' => 'insufficient_growth',
+                                'reason' => 'below_target_count',
+                                'initial_count' => $initialRegisteredCount,
                                 'current_count' => $currentRegisteredCount,
-                                'last_count' => $lastRegisteredCount,
-                                'growth' => $growth,
-                                'required_growth' => 5
+                                'target_count' => $targetCount,
+                                'growth_needed' => $targetCount - $currentRegisteredCount
                             ];
 
-                            Log::info('Performer skipped - insufficient growth', [
+                            Log::info('Performer skipped - below target count', [
                                 'performer_id' => $performer->id,
                                 'phone' => $performer->browsing_number,
+                                'initial_count' => $initialRegisteredCount,
                                 'current_count' => $currentRegisteredCount,
-                                'last_count' => $lastRegisteredCount,
-                                'growth' => $growth,
-                                'required_growth' => 5
+                                'target_count' => $targetCount,
+                                'growth_needed' => $targetCount - $currentRegisteredCount
                             ]);
                         }
                     } else {
-                        // No recent subscription - eligible for first time
+                        // No previous subscription - eligible for first time
                         $performer->current_registered_count = $currentRegisteredCount;
-                        $performer->last_registered_count = 0;
-                        $performer->growth = $currentRegisteredCount;
+                        $performer->initial_registered_count = $currentRegisteredCount;
+                        $performer->target_count = $currentRegisteredCount + 100;
+                        $performer->growth = 0;
                         $performer->data_source = $dataSource;
                         $eligiblePerformers[] = $performer;
 
-                        Log::info('Performer eligible - no recent subscription', [
+                        Log::info('Performer eligible - first time subscription', [
                             'performer_id' => $performer->id,
                             'phone' => $performer->browsing_number,
                             'current_count' => $currentRegisteredCount,
+                            'future_target' => $currentRegisteredCount + 100,
                             'first_time' => true
                         ]);
                     }
@@ -1121,7 +1124,9 @@ class AdminController extends Controller
                         'message' => $responseData['message'] ?? 'Unknown error',
                         'transaction_id' => $subscription->transaction_id,
                         'registered_users_count' => $performer->current_registered_count,
-                        'growth_since_last' => $performer->growth ?? 0,
+                        'initial_registered_count' => $performer->initial_registered_count,
+                        'target_count' => $performer->target_count,
+                        'growth' => $performer->growth,
                         'data_source' => $performer->data_source
                     ];
 
