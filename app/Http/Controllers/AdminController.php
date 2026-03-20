@@ -608,12 +608,11 @@ class AdminController extends Controller
                     'full_name',
                     'code',
                     'email',
-                    'phone',
                     'browsing_number',
                     'whatsapp',
                     'account_number',
                     'bank_name',
-                    'network',
+                    'browsing_network',
                     'state',
                     'lga',
                     'ward'
