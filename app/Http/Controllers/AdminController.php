@@ -448,8 +448,18 @@ class AdminController extends Controller
     private function fetchExternalData()
     {
         try {
-            $dataUrl = env('DATA_URL') . '/api/data';
-            $apiToken = env('DATA_API');
+            $dataUrl = config('services.data_api.url') . '/api/data';
+            $apiToken = config('services.data_api.token');
+            
+            // Validate configuration
+            if (empty($dataUrl) || empty($apiToken)) {
+                Log::error('Data API configuration missing', [
+                    'url_configured' => !empty($dataUrl),
+                    'token_configured' => !empty($apiToken),
+                    'timestamp' => now()->toISOString()
+                ]);
+                return null;
+            }
             
             $client = new \GuzzleHttp\Client([
                 'timeout' => 30,

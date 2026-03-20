@@ -49,4 +49,9 @@ return [
         'url' => env('PU_URL', 'https://api.sandbox.easinovation.com.ng'),
     ],
 
+    'data_api' => [
+        'url' => env('DATA_URL', 'https://app.gksubtopup.com'),
+        'token' => env('DATA_API'),
+    ],
+
 ];
