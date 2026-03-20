@@ -116,7 +116,9 @@ export default function DataSub() {
         const matchesNetwork = !selectedNetworkLocal || 
             (performer.browsing_network && performer.browsing_network.toLowerCase() === selectedNetworkLocal.toLowerCase());
         
-        return matchesSearch && matchesNetwork;
+        const hasEnoughRegistrations = performer.members_registered >= 2;
+        
+        return matchesSearch && matchesNetwork && hasEnoughRegistrations;
     });
 
     // Network colors for badges
@@ -133,7 +135,7 @@ export default function DataSub() {
     // Calculate local stats
     const localStats = {
         total_enumerators: topPerformers.length,
-        total_top_performers: topPerformers.filter(p => p.members_registered > 2).length,
+        total_top_performers: topPerformers.filter(p => p.members_registered >= 2).length,
         unique_networks: networks.length,
         filtered_count: filteredPerformersList.length,
     };

@@ -638,23 +638,24 @@ class AdminController extends Controller
                     return $enumerator;
 
                 } catch (\Exception $memberException) {
-                    Log::warning('External database not reachable, using fallback logic', [
+                    Log::error('External database not reachable', [
                         'enumerator_id' => $enumerator->id,
                         'error' => $memberException->getMessage()
                     ]);
 
-                    // Fallback logic for testing
-                    if ($enumerator->email === 'easinovation@gmail.com') {
-                        $enumerator->members_registered = 105; // Changed from 5 to 105 for testing
-                    } else {
-                        $enumerator->members_registered = 0;
-                    }
-                    $enumerator->data_source = 'fallback';
+                    // Skip this enumerator - no fallback for production
+                    $enumerator->members_registered = 0;
+                    $enumerator->data_source = 'error';
                     return $enumerator;
                 }
             })->sortByDesc('members_registered')->values();
 
-            return $enumeratorsWithCounts;
+            // Filter to only return those with 2 or more registered users
+            $topPerformers = $enumeratorsWithCounts->filter(function ($enumerator) {
+                return $enumerator->members_registered >= 2;
+            })->values();
+
+            return $topPerformers;
 
         } catch (\Exception $e) {
             Log::error('Failed to get enumerators for data sub', [
@@ -933,7 +934,7 @@ class AdminController extends Controller
 
             foreach ($performers as $performer) {
                 try {
-                    // Get member counts from external database (with fallback logic)
+                    // Get member counts from external database only
                     try {
                         $currentRegisteredCount = DB::connection('external_mysql')
                             ->table('members')
@@ -941,18 +942,25 @@ class AdminController extends Controller
                             ->count();
                         $dataSource = 'external';
                     } catch (\Exception $memberException) {
-                        Log::warning('External database not reachable, using fallback logic', [
+                        Log::error('External database not reachable', [
                             'performer_id' => $performer->id,
                             'error' => $memberException->getMessage()
                         ]);
 
-                        // Fallback logic for testing
-                        if ($performer->email === 'easinovation@gmail.com') {
-                            $currentRegisteredCount = 105; // Changed from 5 to 105 for testing
-                        } else {
-                            $currentRegisteredCount = 0;
-                        }
-                        $dataSource = 'fallback';
+                        // Skip this performer - no fallback for production
+                        $skippedPerformers[] = [
+                            'performer_id' => $performer->id,
+                            'phone' => $performer->browsing_number ?? 'Unknown',
+                            'reason' => 'external_database_unreachable',
+                            'error' => $memberException->getMessage()
+                        ];
+
+                        Log::error('Performer skipped - external database unreachable', [
+                            'performer_id' => $performer->id,
+                            'phone' => $performer->browsing_number,
+                            'error' => $memberException->getMessage()
+                        ]);
+                        continue; // Skip to next performer
                     }
 
                     // Check if performer has any previous subscription (not just recent)
