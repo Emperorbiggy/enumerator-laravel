@@ -860,6 +860,9 @@ class AdminController extends Controller
      */
     public function sendBatchData(Request $request)
     {
+        // Increase execution time for large batches
+        set_time_limit(600); // 10 minutes
+        
         $startTime = microtime(true);
         
         try {
@@ -874,11 +877,22 @@ class AdminController extends Controller
             $planCode = $validated['plan_code'];
             $network = $validated['network'];
 
+            // Limit batch size to prevent timeout (max 50 per batch)
+            if (count($performerIds) > 50) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batch size too large. Maximum 50 performers allowed per batch to prevent timeout.',
+                    'requested_count' => count($performerIds),
+                    'max_allowed' => 50
+                ], 400);
+            }
+
             Log::info('Batch data send started', [
                 'performer_count' => count($performerIds),
                 'plan_code' => $planCode,
                 'network' => $network,
                 'admin_id' => Auth::guard('admin')->id(),
+                'estimated_time_minutes' => round((count($performerIds) * 2.5) / 60, 1), // ~2.5 seconds per performer
                 'timestamp' => now()->toISOString()
             ]);
 
@@ -1055,9 +1069,50 @@ class AdminController extends Controller
             $results = [];
             $successCount = 0;
             $failedCount = 0;
+            $processedCount = 0;
 
-            foreach ($eligiblePerformers as $performer) {
+            foreach ($eligiblePerformers as $index => $performer) {
                 try {
+                    // Check if we're approaching timeout
+                    $elapsedTime = microtime(true) - $startTime;
+                    $remainingTime = 600 - $elapsedTime; // 10 minutes limit
+                    $estimatedRemaining = (count($eligiblePerformers) - $index) * 2.5; // ~2.5 seconds per remaining performer
+                    
+                    if ($estimatedRemaining > $remainingTime) {
+                        Log::warning('Approaching timeout, stopping early', [
+                            'processed' => $processedCount,
+                            'remaining' => count($eligiblePerformers) - $index,
+                            'elapsed_seconds' => round($elapsedTime),
+                            'estimated_remaining_seconds' => round($estimatedRemaining),
+                            'time_limit_seconds' => 600
+                        ]);
+                        
+                        // Return partial results
+                        return response()->json([
+                            'success' => true,
+                            'message' => "Partial completion due to time limit. Processed {$processedCount} of " . count($eligiblePerformers) . " eligible performers.",
+                            'results' => [
+                                'eligible' => $results,
+                                'skipped' => array_merge($skippedPerformers, [
+                                    [
+                                        'reason' => 'timeout_prevention',
+                                        'message' => 'Stopped early to prevent PHP timeout',
+                                        'processed_count' => $processedCount,
+                                        'remaining_count' => count($eligiblePerformers) - $index
+                                    ]
+                                ])
+                            ],
+                            'summary' => [
+                                'total_requested' => $performers->count(),
+                                'eligible' => count($eligiblePerformers),
+                                'skipped' => count($skippedPerformers),
+                                'success' => $successCount,
+                                'failed' => $failedCount,
+                                'timeout_prevention' => true
+                            ]
+                        ]);
+                    }
+                    
                     $phone = $this->normalizePhoneNumber($performer->browsing_number);
                     
                     if (empty($phone) || strlen($phone) !== 11) {
@@ -1144,6 +1199,8 @@ class AdminController extends Controller
                         'growth' => $performer->growth,
                         'data_source' => $performer->data_source
                     ];
+                    
+                    $processedCount++;
 
                 } catch (\GuzzleHttp\Exception\ClientException $e) {
                     $failedCount++;
@@ -1351,5 +1408,185 @@ class AdminController extends Controller
 
         // Return original if format doesn't match expected patterns
         return $phone;
+    }
+
+    /**
+     * Show data subscription transactions page
+     */
+    public function dataSubTransactions(Request $request)
+    {
+        $startTime = microtime(true);
+        
+        try {
+            // Get pagination parameters
+            $page = $request->get('page', 1);
+            $perPage = 100;
+            $search = $request->get('search', '');
+            $status = $request->get('status', '');
+            $network = $request->get('network', '');
+            $dateFrom = $request->get('date_from', '');
+            $dateTo = $request->get('date_to', '');
+
+            // Build query
+            $query = DB::table('data_subscriptions')
+                ->select([
+                    'data_subscriptions.*',
+                    'enumerators.full_name as enumerator_name',
+                    'enumerators.email as enumerator_email',
+                    'enumerators.code as enumerator_code',
+                    'enumerators.browsing_number as enumerator_phone',
+                    'admins.name as admin_name'
+                ])
+                ->leftJoin('enumerators', 'data_subscriptions.enumerator_id', '=', 'enumerators.id')
+                ->leftJoin('admins', 'data_subscriptions.admin_id', '=', 'admins.id');
+
+            // Apply filters
+            if (!empty($search)) {
+                $query->where(function($q) use ($search) {
+                    $q->where('data_subscriptions.phone', 'like', "%{$search}%")
+                      ->orWhere('data_subscriptions.transaction_id', 'like', "%{$search}%")
+                      ->orWhere('enumerators.full_name', 'like', "%{$search}%")
+                      ->orWhere('enumerators.email', 'like', "%{$search}%")
+                      ->orWhere('enumerators.code', 'like', "%{$search}%");
+                });
+            }
+
+            if (!empty($status)) {
+                $query->where('data_subscriptions.status', $status);
+            }
+
+            if (!empty($network)) {
+                $query->where('data_subscriptions.network', $network);
+            }
+
+            if (!empty($dateFrom)) {
+                $query->whereDate('data_subscriptions.created_at', '>=', $dateFrom);
+            }
+
+            if (!empty($dateTo)) {
+                $query->whereDate('data_subscriptions.created_at', '<=', $dateTo);
+            }
+
+            // Get total counts
+            $totalCount = $query->count();
+            $successCount = (clone $query)->where('data_subscriptions.status', 'success')->count();
+            $failedCount = (clone $query)->where('data_subscriptions.status', 'failed')->count();
+            $pendingCount = (clone $query)->where('data_subscriptions.status', 'pending')->count();
+
+            // Get unique networks for filter
+            $networks = DB::table('data_subscriptions')
+                ->whereNotNull('network')
+                ->where('network', '!=', '')
+                ->distinct()
+                ->pluck('network')
+                ->sort()
+                ->values();
+
+            // Get paginated results
+            $transactions = $query->orderBy('data_subscriptions.created_at', 'desc')
+                ->offset(($page - 1) * $perPage)
+                ->limit($perPage)
+                ->get()
+                ->map(function ($transaction) {
+                    // Parse full_response if it's a JSON string
+                    if (is_string($transaction->full_response)) {
+                        try {
+                            $transaction->full_response = json_decode($transaction->full_response, true);
+                        } catch (\Exception $e) {
+                            $transaction->full_response = ['error' => 'Invalid JSON'];
+                        }
+                    }
+                    
+                    // Add status badge class
+                    $transaction->status_class = match($transaction->status) {
+                        'success' => 'bg-green-100 text-green-800',
+                        'failed' => 'bg-red-100 text-red-800',
+                        'pending' => 'bg-yellow-100 text-yellow-800',
+                        default => 'bg-gray-100 text-gray-800'
+                    };
+                    
+                    return $transaction;
+                });
+
+            // Calculate pagination info
+            $lastPage = ceil($totalCount / $perPage);
+            $from = ($page - 1) * $perPage + 1;
+            $to = min($page * $perPage, $totalCount);
+
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+
+            Log::info('Admin: Data Sub Transactions Request Completed', [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total_count' => $totalCount,
+                'filtered_count' => $transactions->count(),
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            return Inertia::render('Admin/DataSubTransactions', [
+                'transactions' => $transactions,
+                'pagination' => [
+                    'current_page' => $page,
+                    'last_page' => $lastPage,
+                    'per_page' => $perPage,
+                    'from' => $from,
+                    'to' => $to,
+                    'total' => $totalCount,
+                    'has_more' => $page < $lastPage,
+                    'has_previous' => $page > 1,
+                ],
+                'stats' => [
+                    'total_count' => $totalCount,
+                    'success_count' => $successCount,
+                    'failed_count' => $failedCount,
+                    'pending_count' => $pendingCount,
+                ],
+                'filters' => [
+                    'search' => $search,
+                    'status' => $status,
+                    'network' => $network,
+                    'date_from' => $dateFrom,
+                    'date_to' => $dateTo,
+                ],
+                'available_networks' => $networks,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Admin: Data Sub Transactions Request Failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'timestamp' => now()->toISOString()
+            ]);
+
+            return Inertia::render('Admin/DataSubTransactions', [
+                'transactions' => collect([]),
+                'pagination' => [
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => 100,
+                    'from' => 0,
+                    'to' => 0,
+                    'total' => 0,
+                    'has_more' => false,
+                    'has_previous' => false,
+                ],
+                'stats' => [
+                    'total_count' => 0,
+                    'success_count' => 0,
+                    'failed_count' => 0,
+                    'pending_count' => 0,
+                ],
+                'filters' => [
+                    'search' => '',
+                    'status' => '',
+                    'network' => '',
+                    'date_from' => '',
+                    'date_to' => '',
+                ],
+                'available_networks' => collect([]),
+                'error' => 'Failed to load transactions: ' . $e->getMessage()
+            ]);
+        }
     }
 }

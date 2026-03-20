@@ -32,7 +32,7 @@ export default function DataSub() {
             newSelected.add(performerId);
         }
         setSelectedItems(newSelected);
-        setSelectAll(newSelected.size === filteredData.length);
+        setSelectAll(newSelected.size === filteredPerformersList.length);
     };
 
     // Handle select all
@@ -40,7 +40,7 @@ export default function DataSub() {
         if (selectAll) {
             setSelectedItems(new Set());
         } else {
-            const allIds = filteredData.map(performer => performer.id);
+            const allIds = filteredPerformersList.map(performer => performer.id);
             setSelectedItems(new Set(allIds));
         }
         setSelectAll(!selectAll);
@@ -135,7 +135,7 @@ export default function DataSub() {
         total_enumerators: topPerformers.length,
         total_top_performers: topPerformers.filter(p => p.members_registered > 2).length,
         unique_networks: networks.length,
-        filtered_count: filteredData.length,
+        filtered_count: filteredPerformersList.length,
     };
 
     const getNetworkColor = (network) => {
@@ -329,14 +329,14 @@ export default function DataSub() {
                                     </span>
                                 )}
                                 <div className="text-sm text-gray-500">
-                                    Showing {filteredData.length} of {localStats.total_top_performers} performers
+                                    Showing {filteredPerformersList.length} of {localStats.total_top_performers} performers
                                 </div>
                             </div>
                         </div>
 
-                        {filteredData.length > 0 ? (
+                        {filteredPerformersList.length > 0 ? (
                             <div className="space-y-4">
-                                {filteredData.map((performer, index) => (
+                                {filteredPerformersList.map((performer, index) => (
                                     <div key={performer.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:shadow-md transition-shadow">
                                         <div className="flex items-center justify-between">
                                             {/* Left Section - Rank and Basic Info */}
