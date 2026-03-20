@@ -463,16 +463,25 @@ class AdminController extends Controller
             $response = $client->get($dataUrl);
             
             if ($response->getStatusCode() === 200) {
-                $data = json_decode($response->getBody()->getContents(), true);
+                $responseData = json_decode($response->getBody()->getContents(), true);
+                
+                // Extract the data array from the response
+                $dataPlans = null;
+                if (isset($responseData['success']) && $responseData['success'] === true && isset($responseData['data'])) {
+                    $dataPlans = $responseData['data'];
+                } elseif (is_array($responseData)) {
+                    $dataPlans = $responseData;
+                }
                 
                 Log::info('External API data fetched successfully', [
                     'url' => $dataUrl,
                     'status' => $response->getStatusCode(),
-                    'data_count' => is_array($data) ? count($data) : 0,
+                    'response_structure' => isset($responseData['success']) ? 'structured' : 'array',
+                    'data_count' => is_array($dataPlans) ? count($dataPlans) : 0,
                     'timestamp' => now()->toISOString()
                 ]);
                 
-                return $data;
+                return $dataPlans;
             } else {
                 Log::warning('External API returned non-200 status', [
                     'url' => $dataUrl,

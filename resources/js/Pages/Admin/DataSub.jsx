@@ -9,12 +9,14 @@ export default function DataSub() {
     const [selectedItems, setSelectedItems] = useState(new Set());
     const [selectAll, setSelectAll] = useState(false);
     const [externalDataState, setExternalDataState] = useState(externalData || null);
+    const [selectedDataPlan, setSelectedDataPlan] = useState('');
 
     // Handle network selection
     const handleNetworkChange = (network) => {
         setSelectedNetworkLocal(network);
         setSelectedItems(new Set());
         setSelectAll(false);
+        setSelectedDataPlan(''); // Reset data plan when network changes
     };
 
     // Handle individual selection
@@ -38,6 +40,17 @@ export default function DataSub() {
             setSelectedItems(new Set(allIds));
         }
         setSelectAll(!selectAll);
+    };
+
+    // Filter data plans by selected network
+    const getFilteredDataPlans = () => {
+        if (!externalDataState || !Array.isArray(externalDataState) || !selectedNetworkLocal) {
+            return [];
+        }
+        
+        return externalDataState.filter(plan => 
+            plan.network && plan.network.toLowerCase() === selectedNetworkLocal.toLowerCase()
+        );
     };
 
     // Filter performers based on search and network
@@ -126,7 +139,7 @@ export default function DataSub() {
                 </div>
 
                 {/* External API Data Section */}
-                {externalDataState && (
+                {externalDataState && selectedNetworkLocal && (
                     <div className="bg-white shadow rounded-lg mb-6">
                         <div className="px-4 py-5 sm:p-6">
                             <div className="flex items-center justify-between mb-4">
@@ -136,27 +149,33 @@ export default function DataSub() {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
                                         </svg>
                                     </div>
-                                    Available Data Plans
+                                    {selectedNetworkLocal.toUpperCase()} Data Plans
                                 </h3>
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                    API Connected
+                                    {getFilteredDataPlans().length} Plans Available
                                 </span>
                             </div>
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {Array.isArray(externalDataState) ? (
-                                    externalDataState.slice(0, 6).map((plan, index) => (
-                                        <div key={index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                                {getFilteredDataPlans().length > 0 ? (
+                                    getFilteredDataPlans().map((plan) => (
+                                        <div key={plan.planApiId} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelectedDataPlan(plan.planApiId)}>
                                             <div className="flex items-center justify-between mb-2">
-                                                <h4 className="text-sm font-medium text-gray-900">{plan.name || plan.plan_name || `Plan ${index + 1}`}</h4>
-                                                <span className="text-lg font-bold text-green-600">₦{plan.price || plan.amount || '0'}</span>
+                                                <h4 className="text-sm font-medium text-gray-900 flex-1">{plan.plan}</h4>
+                                                <span className="text-lg font-bold text-green-600">₦{plan.price}</span>
                                             </div>
                                             <div className="text-xs text-gray-500 space-y-1">
-                                                {plan.size && <div>Size: {plan.size}</div>}
-                                                {plan.validity && <div>Validity: {plan.validity}</div>}
-                                                {plan.network && <div>Network: {plan.network}</div>}
-                                                {plan.type && <div>Type: {plan.type}</div>}
+                                                <div>Type: {plan.dataType}</div>
+                                                <div>ID: {plan.planApiId}</div>
+                                                {plan.dataName && <div>Name: {plan.dataName}</div>}
                                             </div>
+                                            {selectedDataPlan === plan.planApiId && (
+                                                <div className="mt-2">
+                                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                        Selected
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
                                     ))
                                 ) : (
@@ -169,10 +188,9 @@ export default function DataSub() {
                                                     </svg>
                                                 </div>
                                                 <div className="ml-3">
-                                                    <h3 className="text-sm font-medium text-yellow-800">Data Format Notice</h3>
+                                                    <h3 className="text-sm font-medium text-yellow-800">No Data Plans Found</h3>
                                                     <div className="mt-2 text-sm text-yellow-700">
-                                                        <p>External API data received but format needs to be processed.</p>
-                                                        <p className="mt-1">Raw data: {JSON.stringify(externalDataState).substring(0, 100)}...</p>
+                                                        <p>No data plans available for {selectedNetworkLocal.toUpperCase()} network.</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -180,14 +198,6 @@ export default function DataSub() {
                                     </div>
                                 )}
                             </div>
-                            
-                            {Array.isArray(externalDataState) && externalDataState.length > 6 && (
-                                <div className="mt-4 text-center">
-                                    <button className="text-yellow-600 hover:text-yellow-500 text-sm font-medium">
-                                        View all {externalDataState.length} data plans →
-                                    </button>
-                                </div>
-                            )}
                         </div>
                     </div>
                 )}
@@ -195,7 +205,7 @@ export default function DataSub() {
                 {/* Controls Section */}
                 <div className="bg-white shadow rounded-lg mb-6">
                     <div className="px-4 py-5 sm:p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             {/* Network Filter */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -227,6 +237,28 @@ export default function DataSub() {
                                     placeholder="Search by name, code, or email..."
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                                 />
+                            </div>
+
+                            {/* Data Plan Selector */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Select Data Plan
+                                </label>
+                                <select
+                                    value={selectedDataPlan}
+                                    onChange={(e) => setSelectedDataPlan(e.target.value)}
+                                    disabled={!selectedNetworkLocal}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                >
+                                    <option value="">
+                                        {selectedNetworkLocal ? `Select ${selectedNetworkLocal} Plan` : 'Select Network First'}
+                                    </option>
+                                    {getFilteredDataPlans().map((plan) => (
+                                        <option key={plan.planApiId} value={plan.planApiId}>
+                                            {plan.plan} - ₦{plan.price}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
 
                             {/* Selection Controls */}
