@@ -1006,11 +1006,34 @@ class AdminController extends Controller
             $apiUrl = env('DATA_URL') . '/api/data';
             $apiToken = env('DATA_API');
             
+            // Fallback to config if env is not set
+            if (empty($apiUrl)) {
+                $apiUrl = config('services.data_api.url') . '/api/data';
+            }
+            if (empty($apiToken)) {
+                $apiToken = config('services.data_api.token');
+            }
+            
+            Log::info('Batch API configuration check', [
+                'url_from_env' => env('DATA_URL') . '/api/data',
+                'token_from_env' => env('DATA_API') ? 'SET' : 'NOT_SET',
+                'final_url' => $apiUrl,
+                'final_token_set' => !empty($apiToken),
+                'timestamp' => now()->toISOString()
+            ]);
+            
             if (empty($apiUrl) || empty($apiToken)) {
-                Log::error('API configuration missing for batch send');
+                Log::error('API configuration missing for batch send', [
+                    'url_configured' => !empty($apiUrl),
+                    'token_configured' => !empty($apiToken),
+                    'env_url' => env('DATA_URL'),
+                    'env_token' => env('DATA_API') ? 'SET' : 'NOT_SET',
+                    'config_url' => config('services.data_api.url'),
+                    'config_token' => config('services.data_api.token') ? 'SET' : 'NOT_SET'
+                ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'API configuration missing'
+                    'message' => 'API configuration missing. Please check DATA_URL and DATA_API environment variables.'
                 ], 500);
             }
 
@@ -1173,6 +1196,9 @@ class AdminController extends Controller
             $successCount = 0;
             $failedCount = 0;
             $processedCount = 0;
+
+            // Pre-check API health for the selected network
+            $this->checkApiHealth($apiUrl, $planCode, $network, $client);
 
             foreach ($eligiblePerformers as $index => $performer) {
                 try {
@@ -1371,8 +1397,53 @@ class AdminController extends Controller
                         'status_code' => $statusCode,
                         'error' => $e->getMessage(),
                         'error_details' => $errorDetails,
-                        'rate_limit' => $isRateLimit
+                        'rate_limit' => $isRateLimit,
+                        'is_sim_issue' => strpos($responseBody, 'active sim') !== false,
+                        'is_balance_issue' => strpos($responseBody, 'balance') !== false,
+                        'is_network_issue' => strpos($responseBody, 'network') !== false,
+                        'is_transaction_limit' => strpos($responseBody, 'Transaction limit') !== false,
+                        'is_limit_exceeded' => strpos($responseBody, 'limit would be exceeded') !== false
                     ]);
+
+                    // Check if it's a transaction limit error - stop entire batch
+                    if (strpos($responseBody, 'Transaction limit') !== false || strpos($responseBody, 'limit would be exceeded') !== false) {
+                        Log::error('Transaction limit exceeded - stopping batch processing', [
+                            'performer_id' => $performer->id,
+                            'phone' => $phone,
+                            'plan_code' => $planCode,
+                            'network' => $network,
+                            'error_message' => $errorDetails['message'] ?? 'Transaction limit exceeded',
+                            'processed_count' => $processedCount,
+                            'remaining_count' => count($eligiblePerformers) - $index - 1
+                        ]);
+
+                        // Return immediate failure with limit exceeded message
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Transaction limit exceeded. Please contact your API provider to increase limits or try again tomorrow.',
+                            'error_type' => 'transaction_limit_exceeded',
+                            'results' => [
+                                'eligible' => $results,
+                                'skipped' => array_merge($skippedPerformers, [
+                                    [
+                                        'reason' => 'transaction_limit_exceeded',
+                                        'message' => 'Batch stopped due to transaction limit being exceeded',
+                                        'processed_count' => $processedCount,
+                                        'remaining_count' => count($eligiblePerformers) - $index - 1,
+                                        'error_details' => $errorDetails
+                                    ]
+                                ])
+                            ],
+                            'summary' => [
+                                'total_requested' => $performers->count(),
+                                'eligible' => count($eligiblePerformers),
+                                'skipped' => count($skippedPerformers),
+                                'success' => $successCount,
+                                'failed' => $failedCount + 1,
+                                'transaction_limit_exceeded' => true
+                            ]
+                        ], 400);
+                    }
                     
                     if ($isRateLimit) {
                         Log::warning('Rate limit encountered, waiting and retrying', [
@@ -1545,6 +1616,70 @@ class AdminController extends Controller
         }
         
         return (float) $amount;
+    }
+
+    /**
+     * Check API health before processing batch
+     */
+    private function checkApiHealth($apiUrl, $planCode, $network, $client)
+    {
+        try {
+            Log::info('Checking API health', [
+                'api_url' => $apiUrl,
+                'plan_code' => $planCode,
+                'network' => $network
+            ]);
+
+            // Make a test API call with a test phone number
+            $testResponse = $client->post($apiUrl, [
+                'json' => [
+                    'plan_code' => $planCode,
+                    'phone' => '08000000000' // Test phone number
+                ],
+                'timeout' => 15
+            ]);
+
+            $testResponseBody = $testResponse->getBody()->getContents();
+            $testResponseData = json_decode($testResponseBody, true);
+
+            Log::info('API health check completed', [
+                'status_code' => $testResponse->getStatusCode(),
+                'success' => $testResponseData['success'] ?? false,
+                'message' => $testResponseData['message'] ?? 'No message'
+            ]);
+
+            // If API returns SIM or balance issues, log warning
+            if (!$testResponseData['success']) {
+                if (strpos($testResponseBody, 'active sim') !== false) {
+                    Log::warning('API health check failed - SIM issue detected', [
+                        'network' => $network,
+                        'plan_code' => $planCode,
+                        'error_message' => $testResponseData['message'] ?? 'Unknown error'
+                    ]);
+                } elseif (strpos($testResponseBody, 'balance') !== false) {
+                    Log::warning('API health check failed - Balance issue detected', [
+                        'network' => $network,
+                        'plan_code' => $planCode,
+                        'error_message' => $testResponseData['message'] ?? 'Unknown error'
+                    ]);
+                } elseif (strpos($testResponseBody, 'Transaction limit') !== false || strpos($testResponseBody, 'limit would be exceeded') !== false) {
+                    Log::error('API health check failed - Transaction limit exceeded', [
+                        'network' => $network,
+                        'plan_code' => $planCode,
+                        'error_message' => $testResponseData['message'] ?? 'Transaction limit exceeded',
+                        'critical' => true
+                    ]);
+                }
+            }
+
+        } catch (\Exception $e) {
+            Log::error('API health check failed', [
+                'api_url' => $apiUrl,
+                'plan_code' => $planCode,
+                'network' => $network,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
     /**
