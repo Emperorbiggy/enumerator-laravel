@@ -41,9 +41,7 @@ export default function AdminLayout({ children, title }) {
     };
 
     return (
-        <>
-            <Head title={title} />
-            
+        <ToastProvider>
             <div className="min-h-screen bg-gray-50 flex">
                 {/* Mobile sidebar backdrop */}
                 {sidebarOpen && (
@@ -135,12 +133,10 @@ export default function AdminLayout({ children, title }) {
 
                     {/* Main content area */}
                     <main className="flex-1 overflow-y-auto">
-                        <ToastProvider>
-                            {children}
-                        </ToastProvider>
+                        {children}
                     </main>
                 </div>
             </div>
-        </>
+        </ToastProvider>
     );
 }
