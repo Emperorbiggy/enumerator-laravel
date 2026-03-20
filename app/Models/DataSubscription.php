@@ -24,6 +24,8 @@ class DataSubscription extends Model
         'status',
         'full_response',
         'enumerator_id',
+        'registered_users_count',
+        'data_source',
         'admin_id',
     ];
 
