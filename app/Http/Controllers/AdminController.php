@@ -452,10 +452,22 @@ class AdminController extends Controller
             $apiToken = config('services.data_api.token');
             
             // Validate configuration
-            if (empty($dataUrl) || empty($apiToken)) {
+            $configUrl = config('services.data_api.url');
+            $configToken = config('services.data_api.token');
+            
+            Log::info('Data API configuration check', [
+                'url_from_config' => $configUrl,
+                'token_from_config' => $configToken ? 'SET' : 'NOT_SET',
+                'token_length' => $configToken ? strlen($configToken) : 0,
+                'env_url' => env('DATA_URL'),
+                'env_token' => env('DATA_API') ? 'SET' : 'NOT_SET',
+                'timestamp' => now()->toISOString()
+            ]);
+            
+            if (empty($configUrl) || empty($configToken)) {
                 Log::error('Data API configuration missing', [
-                    'url_configured' => !empty($dataUrl),
-                    'token_configured' => !empty($apiToken),
+                    'url_configured' => !empty($configUrl),
+                    'token_configured' => !empty($configToken),
                     'timestamp' => now()->toISOString()
                 ]);
                 return null;
@@ -585,50 +597,120 @@ class AdminController extends Controller
     }
 
     /**
-     * Get top performers with more than 2 members for data subscription
+     * Get top performers for data subscription (enumerators with more than 2 members)
      */
     private function getTopPerformersForDataSub()
     {
         try {
-            // Use the performance stats logic but filter for > 2 members
-            try {
-                $enumerators = Enumerator::select('id', 'code', 'full_name', 'email', 'whatsapp', 'lga', 'ward', 'browsing_number', 'browsing_network', 'registered_at')
-                    ->withCount(['externalMembers as members_registered'])
+            // First try the external database connection
+            if (config('database.connections.external_mysql')) {
+                $topPerformers = DB::connection('external_mysql')
+                    ->table('enumerators')
+                    ->select([
+                        'id', 
+                        'code', 
+                        'full_name', 
+                        'email', 
+                        'whatsapp', 
+                        'lga', 
+                        'ward', 
+                        'browsing_number', 
+                        'browsing_network', 
+                        'registered_at',
+                        DB::raw('(select count(*) from members where enumerators.code = members.agentcode) as members_registered')
+                    ])
                     ->having('members_registered', '>', 2)
                     ->orderBy('members_registered', 'desc')
                     ->get();
-            } catch (\Exception $relationError) {
-                Log::warning('Admin: Using direct connection for data sub performers', [
-                    'error' => $relationError->getMessage()
-                ]);
-
-                // Fallback: Use direct database connection
-                $memberCounts = DB::connection('external_mysql')
-                    ->table('members')
-                    ->select('agentcode', DB::raw('COUNT(*) as count'))
-                    ->groupBy('agentcode')
-                    ->having('count', '>', 2)
-                    ->orderBy('count', 'desc')
-                    ->pluck('count', 'agentcode');
-
-                $enumerators = Enumerator::select('id', 'code', 'full_name', 'email', 'whatsapp', 'lga', 'ward', 'browsing_number', 'browsing_network', 'registered_at')
-                    ->whereIn('code', $memberCounts->keys())
+            } else {
+                // Fallback to main database if external connection fails
+                $topPerformers = DB::table('enumerators')
+                    ->select([
+                        'id', 
+                        'code', 
+                        'full_name', 
+                        'email', 
+                        'whatsapp', 
+                        'lga', 
+                        'ward', 
+                        'browsing_number', 
+                        'browsing_network', 
+                        'registered_at',
+                        DB::raw('(select count(*) from members where enumerators.code = members.agentcode) as members_registered')
+                    ])
+                    ->having('members_registered', '>', 2)
+                    ->orderBy('members_registered', 'desc')
                     ->get();
-
-                // Attach member counts
-                $enumerators = $enumerators->map(function ($enumerator) use ($memberCounts) {
-                    $enumerator->members_registered = $memberCounts->get($enumerator->code, 0);
-                    return $enumerator;
-                })->sortByDesc('members_registered')->values();
             }
-
-            return $enumerators;
-
-        } catch (\Exception $e) {
-            Log::error('Admin: Failed to get data sub performers', [
-                'error' => $e->getMessage()
+            
+            Log::info('Top performers fetched successfully', [
+                'count' => $topPerformers->count(),
+                'connection' => config('database.connections.external_mysql') ? 'external_mysql' : 'main',
+                'timestamp' => now()->toISOString()
             ]);
-            return collect();
+            
+            return $topPerformers;
+            
+        } catch (\Exception $e) {
+            Log::warning('Failed to fetch top performers with member count, using fallback', [
+                'error' => $e->getMessage(),
+                'timestamp' => now()->toISOString()
+            ]);
+            
+            // Fallback: Get all enumerators and sort them manually
+            try {
+                $enumerators = DB::table('enumerators')
+                    ->select([
+                        'id', 
+                        'code', 
+                        'full_name', 
+                        'email', 
+                        'whatsapp', 
+                        'lga', 
+                        'ward', 
+                        'browsing_number', 
+                        'browsing_network', 
+                        'registered_at'
+                    ])
+                    ->get();
+                
+                // Manually count members for each enumerator
+                $topPerformers = $enumerators->map(function ($enumerator) {
+                    try {
+                        $memberCount = DB::table('members')
+                            ->where('agentcode', $enumerator->code)
+                            ->count();
+                        
+                        $enumerator->members_registered = $memberCount;
+                        return $enumerator;
+                    } catch (\Exception $memberException) {
+                        Log::warning('Failed to count members for enumerator', [
+                            'code' => $enumerator->code,
+                            'error' => $memberException->getMessage()
+                        ]);
+                        $enumerator->members_registered = 0;
+                        return $enumerator;
+                    }
+                })->filter(function ($enumerator) {
+                    return $enumerator->members_registered > 2;
+                })->sortByDesc('members_registered')->values();
+                
+                Log::info('Fallback method completed', [
+                    'count' => $topPerformers->count(),
+                    'timestamp' => now()->toISOString()
+                ]);
+                
+                return $topPerformers;
+                
+            } catch (\Exception $fallbackException) {
+                Log::error('All methods failed to fetch top performers', [
+                    'error' => $fallbackException->getMessage(),
+                    'timestamp' => now()->toISOString()
+                ]);
+                
+                // Return empty collection as last resort
+                return collect([]);
+            }
         }
     }
 
