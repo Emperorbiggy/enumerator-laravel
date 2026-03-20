@@ -946,9 +946,9 @@ class AdminController extends Controller
                     $subscription->plan_name = $responseData['data']['planName'] ?? 'Unknown';
                     $subscription->network = $responseData['data']['network'] ?? $network;
                     $subscription->plan_type = $responseData['data']['planType'] ?? 'Unknown';
-                    $subscription->amount = $responseData['data']['amount'] ?? 0;
-                    $subscription->balance_before = $responseData['data']['balanceBefore'] ?? 0;
-                    $subscription->balance_after = $responseData['data']['balanceAfter'] ?? 0;
+                    $subscription->amount = $this->cleanAmount($responseData['data']['amount'] ?? 0);
+                    $subscription->balance_before = $this->cleanAmount($responseData['data']['balanceBefore'] ?? 0);
+                    $subscription->balance_after = $this->cleanAmount($responseData['data']['balanceAfter'] ?? 0);
                     $subscription->response_message = $responseData['data']['response'] ?? 'Success';
                     $subscription->status = $responseData['success'] ? 'success' : 'failed';
                     $subscription->full_response = $responseData;
@@ -1025,9 +1025,9 @@ class AdminController extends Controller
                                 $subscription->plan_name = $retryData['data']['planName'] ?? 'Unknown';
                                 $subscription->network = $retryData['data']['network'] ?? $network;
                                 $subscription->plan_type = $retryData['data']['planType'] ?? 'Unknown';
-                                $subscription->amount = $retryData['data']['amount'] ?? 0;
-                                $subscription->balance_before = $retryData['data']['balanceBefore'] ?? 0;
-                                $subscription->balance_after = $retryData['data']['balanceAfter'] ?? 0;
+                                $subscription->amount = $this->cleanAmount($retryData['data']['amount'] ?? 0);
+                                $subscription->balance_before = $this->cleanAmount($retryData['data']['balanceBefore'] ?? 0);
+                                $subscription->balance_after = $this->cleanAmount($retryData['data']['balanceAfter'] ?? 0);
                                 $subscription->response_message = $retryData['data']['response'] ?? 'Success (after retry)';
                                 $subscription->status = 'success';
                                 $subscription->full_response = $retryData;
@@ -1145,5 +1145,18 @@ class AdminController extends Controller
                 'message' => 'Batch processing failed: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Clean amount values by removing commas and converting to decimal
+     */
+    private function cleanAmount($amount)
+    {
+        if (is_string($amount)) {
+            // Remove commas and convert to float
+            return (float) str_replace(',', '', $amount);
+        }
+        
+        return (float) $amount;
     }
 }
