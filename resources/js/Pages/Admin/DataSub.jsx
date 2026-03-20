@@ -12,7 +12,8 @@ export default function DataSub() {
     const [externalDataState, setExternalDataState] = useState(externalData || null);
     const [selectedDataPlan, setSelectedDataPlan] = useState('');
     const [isSending, setIsSending] = useState(false);
-    const { success, error } = useToast();
+    const [sendingProgress, setSendingProgress] = useState({ current: 0, total: 0 });
+    const { success, error, info } = useToast();
 
     // Handle network selection
     const handleNetworkChange = (network) => {
@@ -66,6 +67,10 @@ export default function DataSub() {
 
         try {
             const performerIds = Array.from(selectedItems);
+            setSendingProgress({ current: 0, total: performerIds.length });
+            
+            // Show initial info toast
+            info(`Starting batch data send for ${performerIds.length} enumerators...`, 3000);
             
             // Use fetch instead of Inertia router for API calls
             const response = await fetch('/admin/send-batch-data', {
@@ -97,6 +102,7 @@ export default function DataSub() {
             error('Error sending data: ' + err.message, 5000);
         } finally {
             setIsSending(false);
+            setSendingProgress({ current: 0, total: 0 });
         }
     };
 
@@ -277,7 +283,17 @@ export default function DataSub() {
                                         disabled={selectedItems.size === 0 || !selectedDataPlan || isSending}
                                         className="flex-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-md text-sm font-medium disabled:cursor-not-allowed"
                                     >
-                                        {isSending ? 'Sending...' : `Send Data (${selectedItems.size})`}
+                                        {isSending ? (
+                                            <div className="flex items-center justify-center">
+                                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                Processing... {sendingProgress.current > 0 && `${sendingProgress.current}/${sendingProgress.total}`}
+                                            </div>
+                                        ) : (
+                                            `Send Data (${selectedItems.size})`
+                                        )}
                                     </button>
                                 </div>
                             </div>

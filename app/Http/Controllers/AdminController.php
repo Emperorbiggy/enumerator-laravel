@@ -922,6 +922,12 @@ class AdminController extends Controller
                         continue;
                     }
 
+                    // Add delay to respect API rate limits (2 seconds between calls)
+                    if ($results !== []) {
+                        Log::info('Delaying 2 seconds to respect API rate limit');
+                        sleep(2);
+                    }
+
                     // Make API call
                     $response = $client->post($apiUrl, [
                         'json' => [
@@ -983,10 +989,87 @@ class AdminController extends Controller
                         'transaction_id' => $subscription->transaction_id,
                     ];
 
-                } catch (\Exception $e) {
+                } catch (\GuzzleHttp\Exception\ClientException $e) {
                     $failedCount++;
                     
-                    // Create failed record
+                    // Check if it's a rate limit error
+                    $responseBody = $e->hasResponse() ? $e->getResponse()->getBody()->getContents() : '';
+                    $isRateLimit = strpos($responseBody, 'Please wait for') !== false;
+                    
+                    if ($isRateLimit) {
+                        Log::warning('Rate limit encountered, waiting and retrying', [
+                            'performer_id' => $performer->id,
+                            'phone' => $performer->browsing_number,
+                            'error' => $e->getMessage()
+                        ]);
+                        
+                        // Wait 3 seconds and retry once
+                        sleep(3);
+                        
+                        try {
+                            $retryResponse = $client->post($apiUrl, [
+                                'json' => [
+                                    'plan_code' => $planCode,
+                                    'phone' => $phone
+                                ]
+                            ]);
+                            
+                            $retryData = json_decode($retryResponse->getBody()->getContents(), true);
+                            
+                            if ($retryData['success']) {
+                                // Create successful subscription record
+                                $subscription = new DataSubscription();
+                                $subscription->transaction_id = $retryData['data']['transactionId'] ?? uniqid('txn_');
+                                $subscription->phone = $phone;
+                                $subscription->plan_code = $planCode;
+                                $subscription->plan_name = $retryData['data']['planName'] ?? 'Unknown';
+                                $subscription->network = $retryData['data']['network'] ?? $network;
+                                $subscription->plan_type = $retryData['data']['planType'] ?? 'Unknown';
+                                $subscription->amount = $retryData['data']['amount'] ?? 0;
+                                $subscription->balance_before = $retryData['data']['balanceBefore'] ?? 0;
+                                $subscription->balance_after = $retryData['data']['balanceAfter'] ?? 0;
+                                $subscription->response_message = $retryData['data']['response'] ?? 'Success (after retry)';
+                                $subscription->status = 'success';
+                                $subscription->full_response = $retryData;
+                                $subscription->enumerator_id = $performer->id;
+                                $subscription->admin_id = Auth::guard('admin')->id();
+                                
+                                try {
+                                    $subscription->save();
+                                } catch (\Exception $saveException) {
+                                    Log::warning('Failed to save retry subscription to database', [
+                                        'error' => $saveException->getMessage(),
+                                        'transaction_id' => $subscription->transaction_id
+                                    ]);
+                                }
+                                
+                                $successCount++;
+                                Log::info('Data sent successfully after retry', [
+                                    'performer_id' => $performer->id,
+                                    'phone' => $phone,
+                                    'transaction_id' => $subscription->transaction_id
+                                ]);
+                                
+                                $results[] = [
+                                    'performer_id' => $performer->id,
+                                    'phone' => $phone,
+                                    'success' => true,
+                                    'message' => $retryData['message'] ?? 'Success after retry',
+                                    'transaction_id' => $subscription->transaction_id,
+                                ];
+                                
+                                continue; // Skip the failed record creation
+                            }
+                        } catch (\Exception $retryException) {
+                            Log::error('Retry also failed', [
+                                'performer_id' => $performer->id,
+                                'phone' => $phone,
+                                'error' => $retryException->getMessage()
+                            ]);
+                        }
+                    }
+                    
+                    // Create failed record (original error or retry failed)
                     $failedSubscription = new DataSubscription();
                     $failedSubscription->transaction_id = uniqid('failed_');
                     $failedSubscription->phone = $performer->browsing_number ?? 'Unknown';
@@ -997,9 +1080,9 @@ class AdminController extends Controller
                     $failedSubscription->amount = 0;
                     $failedSubscription->balance_before = 0;
                     $failedSubscription->balance_after = 0;
-                    $failedSubscription->response_message = $e->getMessage();
+                    $failedSubscription->response_message = $isRateLimit ? 'Rate limit exceeded' : $e->getMessage();
                     $failedSubscription->status = 'failed';
-                    $failedSubscription->full_response = ['error' => $e->getMessage()];
+                    $failedSubscription->full_response = ['error' => $e->getMessage(), 'rate_limit' => $isRateLimit];
                     $failedSubscription->enumerator_id = $performer->id;
                     $failedSubscription->admin_id = Auth::guard('admin')->id();
                     
@@ -1010,20 +1093,20 @@ class AdminController extends Controller
                             'error' => $saveException->getMessage(),
                             'transaction_id' => $failedSubscription->transaction_id
                         ]);
-                        // Continue processing even if save fails
                     }
 
                     Log::error('Failed to send data to performer', [
                         'performer_id' => $performer->id,
                         'phone' => $performer->browsing_number,
-                        'error' => $e->getMessage()
+                        'error' => $e->getMessage(),
+                        'rate_limit' => $isRateLimit
                     ]);
 
                     $results[] = [
                         'performer_id' => $performer->id,
                         'phone' => $performer->browsing_number ?? 'Unknown',
                         'success' => false,
-                        'message' => $e->getMessage(),
+                        'message' => $isRateLimit ? 'Rate limit exceeded - please try again' : $e->getMessage(),
                         'transaction_id' => null,
                     ];
                 }
