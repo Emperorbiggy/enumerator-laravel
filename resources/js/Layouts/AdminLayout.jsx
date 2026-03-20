@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { ToastProvider } from '@/Components/ToastContainer';
 
 export default function AdminLayout({ children, title }) {
     const { url } = usePage();
@@ -41,8 +40,7 @@ export default function AdminLayout({ children, title }) {
     };
 
     return (
-        <ToastProvider>
-            <div className="min-h-screen bg-gray-50 flex">
+        <div className="min-h-screen bg-gray-50 flex">
                 {/* Mobile sidebar backdrop */}
                 {sidebarOpen && (
                     <div 
@@ -137,6 +135,5 @@ export default function AdminLayout({ children, title }) {
                     </main>
                 </div>
             </div>
-        </ToastProvider>
     );
 }
