@@ -449,13 +449,14 @@ class AdminController extends Controller
     private function fetchExternalData()
     {
         try {
-            $dataUrl = env('DATA_URL') . '/api/data';
-            $apiToken = env('DATA_API');
+            // Use services config directly since it's working
+            $dataUrl = config('services.data_api.url') . '/api/data';
+            $apiToken = config('services.data_api.token');
             
             // Validate configuration
             Log::info('Data API configuration check', [
-                'url_from_env' => $dataUrl,
-                'token_from_env' => $apiToken ? 'SET' : 'NOT_SET',
+                'url_from_config' => $dataUrl,
+                'token_from_config' => $apiToken ? 'SET' : 'NOT_SET',
                 'token_length' => $apiToken ? strlen($apiToken) : 0,
                 'raw_env_url' => env('DATA_URL'),
                 'raw_env_token' => env('DATA_API') ? 'SET' : 'NOT_SET',
@@ -1002,23 +1003,18 @@ class AdminController extends Controller
                 ], 400);
             }
 
-            // Initialize API client
-            $apiUrl = env('DATA_URL') . '/api/data';
-            $apiToken = env('DATA_API');
-            
-            // Fallback to config if env is not set
-            if (empty($apiUrl)) {
-                $apiUrl = config('services.data_api.url') . '/api/data';
-            }
-            if (empty($apiToken)) {
-                $apiToken = config('services.data_api.token');
-            }
+            // Initialize API client - use services config directly since it's working
+            $apiUrl = config('services.data_api.url') . '/api/data';
+            $apiToken = config('services.data_api.token');
             
             Log::info('Batch API configuration check', [
-                'url_from_env' => env('DATA_URL') . '/api/data',
-                'token_from_env' => env('DATA_API') ? 'SET' : 'NOT_SET',
-                'final_url' => $apiUrl,
-                'final_token_set' => !empty($apiToken),
+                'url_from_config' => $apiUrl,
+                'token_from_config' => $apiToken ? 'SET' : 'NOT_SET',
+                'token_length' => $apiToken ? strlen($apiToken) : 0,
+                'raw_env_url' => env('DATA_URL'),
+                'raw_env_token' => env('DATA_API') ? 'SET' : 'NOT_SET',
+                'config_url' => config('services.data_api.url'),
+                'config_token' => config('services.data_api.token') ? 'SET' : 'NOT_SET',
                 'timestamp' => now()->toISOString()
             ]);
             
@@ -1033,7 +1029,7 @@ class AdminController extends Controller
                 ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'API configuration missing. Please check DATA_URL and DATA_API environment variables.'
+                    'message' => 'API configuration missing. Please check services.data_api configuration.'
                 ], 500);
             }
 
