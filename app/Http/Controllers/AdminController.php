@@ -639,7 +639,7 @@ class AdminController extends Controller
 
                     // Fallback logic for testing
                     if ($enumerator->email === 'easinovation@gmail.com') {
-                        $enumerator->members_registered = 5;
+                        $enumerator->members_registered = 105; // Changed from 5 to 105 for testing
                     } else {
                         $enumerator->members_registered = 0;
                     }
@@ -922,7 +922,7 @@ class AdminController extends Controller
 
                         // Fallback logic for testing
                         if ($performer->email === 'easinovation@gmail.com') {
-                            $currentRegisteredCount = 5;
+                            $currentRegisteredCount = 105; // Changed from 5 to 105 for testing
                         } else {
                             $currentRegisteredCount = 0;
                         }
