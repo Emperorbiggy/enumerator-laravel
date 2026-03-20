@@ -65,29 +65,35 @@ export default function DataSub() {
         try {
             const performerIds = Array.from(selectedItems);
             
-            const response = await router.post('/admin/send-batch-data', {
-                performer_ids: performerIds,
-                plan_code: selectedDataPlan,
-                network: selectedNetworkLocal,
-            }, {
-                onSuccess: (page) => {
-                    alert('Data sent successfully!');
-                    setSelectedItems(new Set());
-                    setSelectAll(false);
-                    setSelectedDataPlan('');
+            // Use fetch instead of Inertia router for API calls
+            const response = await fetch('/admin/send-batch-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                 },
-                onError: (errors) => {
-                    alert('Error sending data: ' + (errors.message || 'Unknown error'));
-                },
-                onFinish: () => {
-                    setIsSending(false);
-                },
-                preserveState: false,
+                body: JSON.stringify({
+                    performer_ids: performerIds,
+                    plan_code: selectedDataPlan,
+                    network: selectedNetworkLocal,
+                }),
             });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert(`Data sent successfully! ${data.message}`);
+                setSelectedItems(new Set());
+                setSelectAll(false);
+                setSelectedDataPlan('');
+            } else {
+                alert('Error sending data: ' + data.message);
+            }
 
         } catch (error) {
             console.error('Send data error:', error);
             alert('Error sending data: ' + error.message);
+        } finally {
             setIsSending(false);
         }
     };

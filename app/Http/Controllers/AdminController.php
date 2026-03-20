@@ -933,22 +933,31 @@ class AdminController extends Controller
                     $responseData = json_decode($response->getBody()->getContents(), true);
 
                     // Create subscription record
-                    $subscription = DataSubscription::create([
-                        'transaction_id' => $responseData['data']['transactionId'] ?? uniqid('txn_'),
-                        'phone' => $phone,
-                        'plan_code' => $planCode,
-                        'plan_name' => $responseData['data']['planName'] ?? 'Unknown',
-                        'network' => $responseData['data']['network'] ?? $network,
-                        'plan_type' => $responseData['data']['planType'] ?? 'Unknown',
-                        'amount' => $responseData['data']['amount'] ?? 0,
-                        'balance_before' => $responseData['data']['balanceBefore'] ?? 0,
-                        'balance_after' => $responseData['data']['balanceAfter'] ?? 0,
-                        'response_message' => $responseData['data']['response'] ?? 'Success',
-                        'status' => $responseData['success'] ? 'success' : 'failed',
-                        'full_response' => $responseData,
-                        'enumerator_id' => $performer->id,
-                        'admin_id' => Auth::guard('admin')->id(),
-                    ]);
+                    $subscription = new DataSubscription();
+                    $subscription->transaction_id = $responseData['data']['transactionId'] ?? uniqid('txn_');
+                    $subscription->phone = $phone;
+                    $subscription->plan_code = $planCode;
+                    $subscription->plan_name = $responseData['data']['planName'] ?? 'Unknown';
+                    $subscription->network = $responseData['data']['network'] ?? $network;
+                    $subscription->plan_type = $responseData['data']['planType'] ?? 'Unknown';
+                    $subscription->amount = $responseData['data']['amount'] ?? 0;
+                    $subscription->balance_before = $responseData['data']['balanceBefore'] ?? 0;
+                    $subscription->balance_after = $responseData['data']['balanceAfter'] ?? 0;
+                    $subscription->response_message = $responseData['data']['response'] ?? 'Success';
+                    $subscription->status = $responseData['success'] ? 'success' : 'failed';
+                    $subscription->full_response = $responseData;
+                    $subscription->enumerator_id = $performer->id;
+                    $subscription->admin_id = Auth::guard('admin')->id();
+                    
+                    try {
+                        $subscription->save();
+                    } catch (\Exception $saveException) {
+                        Log::warning('Failed to save subscription to database', [
+                            'error' => $saveException->getMessage(),
+                            'transaction_id' => $subscription->transaction_id
+                        ]);
+                        // Continue processing even if save fails
+                    }
 
                     if ($responseData['success']) {
                         $successCount++;
@@ -978,22 +987,31 @@ class AdminController extends Controller
                     $failedCount++;
                     
                     // Create failed record
-                    DataSubscription::create([
-                        'transaction_id' => uniqid('failed_'),
-                        'phone' => $performer->browsing_number ?? 'Unknown',
-                        'plan_code' => $planCode,
-                        'plan_name' => 'Unknown',
-                        'network' => $network,
-                        'plan_type' => 'Unknown',
-                        'amount' => 0,
-                        'balance_before' => 0,
-                        'balance_after' => 0,
-                        'response_message' => $e->getMessage(),
-                        'status' => 'failed',
-                        'full_response' => ['error' => $e->getMessage()],
-                        'enumerator_id' => $performer->id,
-                        'admin_id' => Auth::guard('admin')->id(),
-                    ]);
+                    $failedSubscription = new DataSubscription();
+                    $failedSubscription->transaction_id = uniqid('failed_');
+                    $failedSubscription->phone = $performer->browsing_number ?? 'Unknown';
+                    $failedSubscription->plan_code = $planCode;
+                    $failedSubscription->plan_name = 'Unknown';
+                    $failedSubscription->network = $network;
+                    $failedSubscription->plan_type = 'Unknown';
+                    $failedSubscription->amount = 0;
+                    $failedSubscription->balance_before = 0;
+                    $failedSubscription->balance_after = 0;
+                    $failedSubscription->response_message = $e->getMessage();
+                    $failedSubscription->status = 'failed';
+                    $failedSubscription->full_response = ['error' => $e->getMessage()];
+                    $failedSubscription->enumerator_id = $performer->id;
+                    $failedSubscription->admin_id = Auth::guard('admin')->id();
+                    
+                    try {
+                        $failedSubscription->save();
+                    } catch (\Exception $saveException) {
+                        Log::warning('Failed to save failed subscription to database', [
+                            'error' => $saveException->getMessage(),
+                            'transaction_id' => $failedSubscription->transaction_id
+                        ]);
+                        // Continue processing even if save fails
+                    }
 
                     Log::error('Failed to send data to performer', [
                         'performer_id' => $performer->id,
