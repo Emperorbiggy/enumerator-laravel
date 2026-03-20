@@ -597,7 +597,7 @@ class AdminController extends Controller
     }
 
     /**
-     * Get top performers for data subscription (enumerators with more than 2 members)
+     * Get all enumerators with their member counts for data subscription
      */
     private function getTopPerformersForDataSub()
     {
@@ -624,7 +624,7 @@ class AdminController extends Controller
             ]);
             
             // Step 2: For each enumerator, count their members in the external database
-            $topPerformers = $enumerators->map(function ($enumerator) {
+            $enumeratorsWithCounts = $enumerators->map(function ($enumerator) {
                 try {
                     $memberCount = DB::connection('external_mysql')
                         ->table('members')
@@ -642,17 +642,15 @@ class AdminController extends Controller
                     $enumerator->members_registered = 0;
                     return $enumerator;
                 }
-            })->filter(function ($enumerator) {
-                return $enumerator->members_registered > 2;
             })->sortByDesc('members_registered')->values();
             
-            Log::info('Top performers calculated successfully', [
+            Log::info('All enumerators with member counts calculated', [
                 'total_enumerators' => $enumerators->count(),
-                'top_performers_count' => $topPerformers->count(),
+                'enumerators_with_counts' => $enumeratorsWithCounts->count(),
                 'timestamp' => now()->toISOString()
             ]);
             
-            return $topPerformers;
+            return $enumeratorsWithCounts;
             
         } catch (\Exception $e) {
             Log::error('Failed to fetch enumerators from main database', [

@@ -117,7 +117,8 @@ export default function DataSub() {
 
     // Calculate local stats
     const localStats = {
-        total_top_performers: topPerformers.length,
+        total_enumerators: topPerformers.length,
+        total_top_performers: topPerformers.filter(p => p.members_registered > 2).length,
         unique_networks: networks.length,
         filtered_count: filteredData.length,
     };
@@ -130,32 +131,32 @@ export default function DataSub() {
         <AdminLayout title="Data Sub">
             <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                 {/* Stats Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-lg p-6 text-white">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                    <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-6 text-white">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-yellow-100 text-sm font-medium">Top Performers</p>
-                                <p className="text-3xl font-bold">{localStats.total_top_performers}</p>
-                                <p className="text-yellow-100 text-xs">With 2+ members</p>
+                                <p className="text-blue-100 text-sm font-medium">Total Enumerators</p>
+                                <p className="text-3xl font-bold">{localStats.total_enumerators}</p>
+                                <p className="text-blue-100 text-xs">All registered</p>
                             </div>
-                            <div className="w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center">
+                            <div className="w-12 h-12 bg-blue-400 rounded-full flex items-center justify-center">
                                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                                 </svg>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-6 text-white">
+                    <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-lg p-6 text-white">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-blue-100 text-sm font-medium">Network Providers</p>
-                                <p className="text-3xl font-bold">{localStats.unique_networks}</p>
-                                <p className="text-blue-100 text-xs">Available networks</p>
+                                <p className="text-yellow-100 text-sm font-medium">Top Performers</p>
+                                <p className="text-3xl font-bold">{localStats.total_top_performers}</p>
+                                <p className="text-yellow-100 text-xs">With 3+ members</p>
                             </div>
-                            <div className="w-12 h-12 bg-blue-400 rounded-full flex items-center justify-center">
+                            <div className="w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center">
                                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                                 </svg>
                             </div>
                         </div>
@@ -164,13 +165,28 @@ export default function DataSub() {
                     <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-6 text-white">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-green-100 text-sm font-medium">Filtered Results</p>
-                                <p className="text-3xl font-bold">{localStats.filtered_count}</p>
-                                {selectedNetworkLocal && <p className="text-green-100 text-xs">{selectedNetworkLocal} network</p>}
+                                <p className="text-green-100 text-sm font-medium">Unique Networks</p>
+                                <p className="text-3xl font-bold">{localStats.unique_networks}</p>
+                                <p className="text-green-100 text-xs">Available networks</p>
                             </div>
                             <div className="w-12 h-12 bg-green-400 rounded-full flex items-center justify-center">
                                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-6 text-white">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-purple-100 text-sm font-medium">Filtered Results</p>
+                                <p className="text-3xl font-bold">{localStats.filtered_count}</p>
+                                {selectedNetworkLocal && <p className="text-purple-100 text-xs">{selectedNetworkLocal} network</p>}
+                            </div>
+                            <div className="w-12 h-12 bg-purple-400 rounded-full flex items-center justify-center">
+                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                                 </svg>
                             </div>
                         </div>
