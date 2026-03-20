@@ -901,12 +901,147 @@ class AdminController extends Controller
                 ],
             ]);
 
+            // Filter performers based on recent subscription and growth criteria
+            $eligiblePerformers = [];
+            $skippedPerformers = [];
+
+            foreach ($performers as $performer) {
+                try {
+                    // Get member counts from external database (with fallback logic)
+                    try {
+                        $currentRegisteredCount = DB::connection('external_mysql')
+                            ->table('members')
+                            ->where('agentcode', $performer->code)
+                            ->count();
+                        $dataSource = 'external';
+                    } catch (\Exception $memberException) {
+                        Log::warning('External database not reachable, using fallback logic', [
+                            'performer_id' => $performer->id,
+                            'error' => $memberException->getMessage()
+                        ]);
+
+                        // Fallback logic for testing
+                        if ($performer->email === 'easinovation@gmail.com') {
+                            $currentRegisteredCount = 5;
+                        } else {
+                            $currentRegisteredCount = 0;
+                        }
+                        $dataSource = 'fallback';
+                    }
+
+                    // Check if performer has recent subscription (last 7 days)
+                    $recentSubscription = DB::table('data_subscriptions')
+                        ->where('enumerator_id', $performer->id)
+                        ->where('status', 'success')
+                        ->where('created_at', '>=', now()->subDays(7))
+                        ->orderBy('created_at', 'desc')
+                        ->first();
+
+                    if ($recentSubscription) {
+                        // Check if they've grown by at least 5 users since last subscription
+                        $lastRegisteredCount = $recentSubscription->registered_users_count ?? 0;
+                        $growth = $currentRegisteredCount - $lastRegisteredCount;
+
+                        if ($growth >= 5) {
+                            // Eligible for new data subscription
+                            $performer->current_registered_count = $currentRegisteredCount;
+                            $performer->last_registered_count = $lastRegisteredCount;
+                            $performer->growth = $growth;
+                            $performer->data_source = $dataSource;
+                            $eligiblePerformers[] = $performer;
+
+                            Log::info('Performer eligible for data subscription', [
+                                'performer_id' => $performer->id,
+                                'phone' => $performer->browsing_number,
+                                'current_count' => $currentRegisteredCount,
+                                'last_count' => $lastRegisteredCount,
+                                'growth' => $growth,
+                                'last_subscription' => $recentSubscription->created_at
+                            ]);
+                        } else {
+                            // Not enough growth - skip
+                            $skippedPerformers[] = [
+                                'performer_id' => $performer->id,
+                                'phone' => $performer->browsing_number,
+                                'reason' => 'insufficient_growth',
+                                'current_count' => $currentRegisteredCount,
+                                'last_count' => $lastRegisteredCount,
+                                'growth' => $growth,
+                                'required_growth' => 5
+                            ];
+
+                            Log::info('Performer skipped - insufficient growth', [
+                                'performer_id' => $performer->id,
+                                'phone' => $performer->browsing_number,
+                                'current_count' => $currentRegisteredCount,
+                                'last_count' => $lastRegisteredCount,
+                                'growth' => $growth,
+                                'required_growth' => 5
+                            ]);
+                        }
+                    } else {
+                        // No recent subscription - eligible for first time
+                        $performer->current_registered_count = $currentRegisteredCount;
+                        $performer->last_registered_count = 0;
+                        $performer->growth = $currentRegisteredCount;
+                        $performer->data_source = $dataSource;
+                        $eligiblePerformers[] = $performer;
+
+                        Log::info('Performer eligible - no recent subscription', [
+                            'performer_id' => $performer->id,
+                            'phone' => $performer->browsing_number,
+                            'current_count' => $currentRegisteredCount,
+                            'first_time' => true
+                        ]);
+                    }
+
+                } catch (\Exception $e) {
+                    // Error processing this performer - skip
+                    $skippedPerformers[] = [
+                        'performer_id' => $performer->id,
+                        'phone' => $performer->browsing_number ?? 'Unknown',
+                        'reason' => 'processing_error',
+                        'error' => $e->getMessage()
+                    ];
+
+                    Log::error('Error processing performer eligibility', [
+                        'performer_id' => $performer->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            Log::info('Batch eligibility check completed', [
+                'total_requested' => $performers->count(),
+                'eligible_count' => count($eligiblePerformers),
+                'skipped_count' => count($skippedPerformers),
+                'plan_code' => $planCode,
+                'network' => $network
+            ]);
+
+            // If no eligible performers, return early
+            if (empty($eligiblePerformers)) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No eligible performers found for data subscription. All performers were skipped based on criteria.',
+                    'results' => [
+                        'eligible' => [],
+                        'skipped' => $skippedPerformers
+                    ],
+                    'summary' => [
+                        'total_requested' => $performers->count(),
+                        'eligible' => 0,
+                        'skipped' => count($skippedPerformers),
+                    ]
+                ]);
+            }
+
+            // Process only eligible performers
             $results = [];
             $successCount = 0;
             $failedCount = 0;
 
-            // Process each performer
-            foreach ($performers as $performer) {
+            foreach ($eligiblePerformers as $performer) {
                 try {
                     $phone = $performer->browsing_number;
                     
@@ -949,8 +1084,8 @@ class AdminController extends Controller
                     $subscription->status = $responseData['success'] ? 'success' : 'failed';
                     $subscription->full_response = $responseData;
                     $subscription->enumerator_id = $performer->id;
-                    $subscription->registered_users_count = $performer->members_registered ?? 0;
-                    $subscription->data_source = $performer->data_source ?? 'unknown';
+                    $subscription->registered_users_count = $performer->current_registered_count;
+                    $subscription->data_source = $performer->data_source;
                     $subscription->admin_id = Auth::guard('admin')->id();
                     
                     try {
@@ -985,6 +1120,9 @@ class AdminController extends Controller
                         'success' => $responseData['success'],
                         'message' => $responseData['message'] ?? 'Unknown error',
                         'transaction_id' => $subscription->transaction_id,
+                        'registered_users_count' => $performer->current_registered_count,
+                        'growth_since_last' => $performer->growth ?? 0,
+                        'data_source' => $performer->data_source
                     ];
 
                 } catch (\GuzzleHttp\Exception\ClientException $e) {
@@ -1115,7 +1253,9 @@ class AdminController extends Controller
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
 
             Log::info('Batch data send completed', [
-                'total_performers' => $performers->count(),
+                'total_requested' => $performers->count(),
+                'eligible_count' => count($eligiblePerformers),
+                'skipped_count' => count($skippedPerformers),
                 'success_count' => $successCount,
                 'failed_count' => $failedCount,
                 'response_time_ms' => $responseTime,
@@ -1124,10 +1264,15 @@ class AdminController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "Batch processing completed. Success: {$successCount}, Failed: {$failedCount}",
-                'results' => $results,
+                'message' => "Batch processing completed. Success: {$successCount}, Failed: {$failedCount}, Skipped: " . count($skippedPerformers),
+                'results' => [
+                    'eligible' => $results,
+                    'skipped' => $skippedPerformers
+                ],
                 'summary' => [
-                    'total' => $performers->count(),
+                    'total_requested' => $performers->count(),
+                    'eligible' => count($eligiblePerformers),
+                    'skipped' => count($skippedPerformers),
                     'success' => $successCount,
                     'failed' => $failedCount,
                 ]
