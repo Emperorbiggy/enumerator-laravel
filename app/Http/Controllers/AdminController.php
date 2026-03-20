@@ -162,15 +162,12 @@ class AdminController extends Controller
                 'timestamp' => now()->toISOString()
             ]);
 
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'enumerators' => $enumerators,
-                    'stats' => $stats,
-                    'top_performers' => $topPerformers,
-                    'performance_by_lga' => $performanceByLga,
-                ],
-                'response_time_ms' => $responseTime
+            return Inertia::render('Admin/EnumeratorPerformance', [
+                'enumerators' => $enumerators,
+                'stats' => $stats,
+                'topPerformers' => $topPerformers,
+                'performanceByLga' => $performanceByLga,
+                'responseTime' => $responseTime
             ]);
 
         } catch (\Exception $e) {
@@ -185,11 +182,14 @@ class AdminController extends Controller
                 'timestamp' => now()->toISOString()
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch enumerator performance data',
+            return Inertia::render('Admin/EnumeratorPerformance', [
+                'enumerators' => collect([]),
+                'stats' => [],
+                'topPerformers' => collect([]),
+                'performanceByLga' => collect([]),
+                'responseTime' => $responseTime,
                 'error' => app()->environment('local') ? $e->getMessage() : 'Database permission error. Contact administrator.'
-            ], 500);
+            ]);
         }
     }
 
