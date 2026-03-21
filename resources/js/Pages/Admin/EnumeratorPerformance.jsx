@@ -29,6 +29,17 @@ export default function EnumeratorPerformance({
         }, { preserveState: true });
     };
 
+    const maskName = (name) => {
+        if (!name || name.length <= 2) return name;
+        
+        // Show first 2 characters and last character, mask the middle
+        const firstTwo = name.substring(0, 2);
+        const lastChar = name.substring(name.length - 1);
+        const middleStars = '*'.repeat(name.length - 3);
+        
+        return firstTwo + middleStars + lastChar;
+    };
+
     const formatDate = (dateString) => {
         return new Date(dateString).toLocaleString();
     };
@@ -206,7 +217,7 @@ export default function EnumeratorPerformance({
                                             <tr key={enumerator.id} className="hover:bg-gray-50">
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="text-sm font-medium text-gray-900">
-                                                        {enumerator.full_name}
+                                                        {maskName(enumerator.full_name)}
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">

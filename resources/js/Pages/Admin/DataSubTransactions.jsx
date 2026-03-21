@@ -93,6 +93,17 @@ export default function DataSubTransactions({
                (transaction.retry_count || 0) < 5;
     };
 
+    const maskName = (name) => {
+        if (!name || name.length <= 2) return name;
+        
+        // Show first 2 characters and last character, mask the middle
+        const firstTwo = name.substring(0, 2);
+        const lastChar = name.substring(name.length - 1);
+        const middleStars = '*'.repeat(name.length - 3);
+        
+        return firstTwo + middleStars + lastChar;
+    };
+
     const formatDate = (dateString) => {
         return new Date(dateString).toLocaleString();
     };
@@ -349,7 +360,7 @@ export default function DataSubTransactions({
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900">
-                                                    {transaction.enumerator_name}
+                                                    {maskName(transaction.enumerator_name)}
                                                 </div>
                                                 <div className="text-sm text-gray-500">
                                                     {transaction.enumerator_code}
