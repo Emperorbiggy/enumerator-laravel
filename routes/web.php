@@ -35,6 +35,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/data-sub', [AdminController::class, 'dataSub'])->name('data.sub');
     Route::get('/data-sub-transactions', [AdminController::class, 'dataSubTransactions'])->name('data.sub.transactions');
     Route::post('/send-batch-data', [AdminController::class, 'sendBatchData'])->name('send.batch.data');
+    Route::post('/retry-transaction', [AdminController::class, 'retryTransaction'])->name('retry.transaction');
+    Route::get('/failed-transactions', [AdminController::class, 'getFailedTransactions'])->name('failed.transactions');
     Route::get('/data-plan-management', [AdminController::class, 'dataPlanManagement'])->name('data.plan.management');
     Route::get('/enumerators/{enumerator}', [AdminController::class, 'showEnumerator'])->name('enumerators.show');
 });

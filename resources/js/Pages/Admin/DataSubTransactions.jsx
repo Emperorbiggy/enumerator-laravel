@@ -15,6 +15,7 @@ export default function DataSubTransactions({
     const [selectedNetwork, setSelectedNetwork] = useState(filters.network || '');
     const [dateFrom, setDateFrom] = useState(filters.date_from || '');
     const [dateTo, setDateTo] = useState(filters.date_to || '');
+    const [retryingTransaction, setRetryingTransaction] = useState(null);
 
     const applyFilters = () => {
         router.get(route('admin.data-sub-transactions'), {
@@ -50,6 +51,46 @@ export default function DataSubTransactions({
             date_to: dateTo,
             page
         }, { preserveState: true });
+    };
+
+    const handleRetryTransaction = async (transactionId) => {
+        if (!confirm('Are you sure you want to retry this transaction?')) {
+            return;
+        }
+
+        setRetryingTransaction(transactionId);
+        
+        try {
+            const response = await fetch(route('admin.retry.transaction'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    transaction_id: transactionId
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert('Transaction retried successfully!');
+                // Reload the page to show updated data
+                router.reload();
+            } else {
+                alert('Retry failed: ' + result.message);
+            }
+        } catch (error) {
+            alert('Error retrying transaction: ' + error.message);
+        } finally {
+            setRetryingTransaction(null);
+        }
+    };
+
+    const canRetryTransaction = (transaction) => {
+        return transaction.status === 'failed' && 
+               (transaction.retry_count || 0) < 5;
     };
 
     const formatDate = (dateString) => {
@@ -291,6 +332,9 @@ export default function DataSubTransactions({
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Registered Users
                                     </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Actions
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
@@ -337,12 +381,53 @@ export default function DataSubTransactions({
                                                         ({transaction.data_source})
                                                     </div>
                                                 )}
+                                                {transaction.retry_count > 0 && (
+                                                    <div className="text-xs text-orange-500">
+                                                        Retries: {transaction.retry_count}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {canRetryTransaction(transaction) && (
+                                                    <button
+                                                        onClick={() => handleRetryTransaction(transaction.transaction_id)}
+                                                        disabled={retryingTransaction === transaction.transaction_id}
+                                                        className="inline-flex items-center px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        {retryingTransaction === transaction.transaction_id ? (
+                                                            <>
+                                                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                </svg>
+                                                                Retrying...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                </svg>
+                                                                Retry
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                )}
+                                                {transaction.status === 'success' && (
+                                                    <span className="inline-flex items-center px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-md">
+                                                        Completed
+                                                    </span>
+                                                )}
+                                                {transaction.retry_count >= 5 && (
+                                                    <span className="inline-flex items-center px-3 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-md">
+                                                        Max Retries
+                                                    </span>
+                                                )}
                                             </td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan="8" className="px-6 py-4 text-center text-sm text-gray-500">
+                                        <td colSpan="9" className="px-6 py-4 text-center text-sm text-gray-500">
                                             No transactions found
                                         </td>
                                     </tr>

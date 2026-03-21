@@ -1602,7 +1602,208 @@ class AdminController extends Controller
     }
 
     /**
-     * Clean amount values by removing commas and converting to decimal
+     * Retry failed data subscription transaction
+     */
+    public function retryTransaction(Request $request)
+    {
+        $validated = $request->validate([
+            'transaction_id' => 'required|string'
+        ]);
+
+        try {
+            // Find the transaction
+            $transaction = DB::table('data_subscriptions')
+                ->where('transaction_id', $validated['transaction_id'])
+                ->first();
+
+            if (!$transaction) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaction not found'
+                ], 404);
+            }
+
+            // Check if transaction can be retried
+            if ($transaction->status === 'success') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaction was successful, no need to retry'
+                ], 400);
+            }
+
+            // Check retry limit (max 5 retries)
+            if ($transaction->retry_count >= 5) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Maximum retry limit (5) reached for this transaction'
+                ], 400);
+            }
+
+            // Initialize API client
+            $apiUrl = config('services.data_api.url') . '/api/data';
+            $apiToken = config('services.data_api.token');
+
+            if (empty($apiUrl) || empty($apiToken)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'API configuration missing'
+                ], 500);
+            }
+
+            $client = new \GuzzleHttp\Client([
+                'timeout' => 30,
+                'headers' => [
+                    'accept' => 'application/json',
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'Content-Type' => 'application/json',
+                ],
+            ]);
+
+            Log::info('Retrying transaction', [
+                'transaction_id' => $transaction->transaction_id,
+                'phone' => $transaction->phone,
+                'plan_code' => $transaction->plan_code,
+                'retry_count' => $transaction->retry_count + 1,
+                'admin_id' => Auth::guard('admin')->id()
+            ]);
+
+            // Make API call
+            $response = $client->post($apiUrl, [
+                'json' => [
+                    'plan_code' => $transaction->plan_code,
+                    'phone' => $transaction->phone
+                ],
+                'timeout' => 30,
+                'connect_timeout' => 10
+            ]);
+
+            $responseBody = $response->getBody()->getContents();
+            $responseData = json_decode($responseBody, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new \Exception('Invalid JSON response from API: ' . json_last_error_msg());
+            }
+
+            // Update retry count and timestamp
+            $updateData = [
+                'retry_count' => $transaction->retry_count + 1,
+                'last_retried_at' => now(),
+                'updated_at' => now()
+            ];
+
+            if ($responseData['success']) {
+                // Success - update transaction details
+                $updateData = array_merge($updateData, [
+                    'status' => 'success',
+                    'response_message' => $responseData['data']['response'] ?? 'Success',
+                    'amount' => $this->cleanAmount($responseData['data']['amount'] ?? $transaction->amount),
+                    'balance_before' => $this->cleanAmount($responseData['data']['balanceBefore'] ?? $transaction->balance_before),
+                    'balance_after' => $this->cleanAmount($responseData['data']['balanceAfter'] ?? $transaction->balance_after)
+                ]);
+
+                Log::info('Transaction retry successful', [
+                    'transaction_id' => $transaction->transaction_id,
+                    'phone' => $transaction->phone,
+                    'retry_count' => $updateData['retry_count']
+                ]);
+
+                $result = [
+                    'success' => true,
+                    'message' => 'Transaction retried successfully',
+                    'data' => [
+                        'transaction_id' => $transaction->transaction_id,
+                        'status' => 'success',
+                        'retry_count' => $updateData['retry_count']
+                    ]
+                ];
+            } else {
+                // Failed - update with error message
+                $updateData['response_message'] = $responseData['message'] ?? 'Retry failed';
+
+                Log::error('Transaction retry failed', [
+                    'transaction_id' => $transaction->transaction_id,
+                    'phone' => $transaction->phone,
+                    'retry_count' => $updateData['retry_count'],
+                    'error' => $responseData['message'] ?? 'Unknown error'
+                ]);
+
+                $result = [
+                    'success' => false,
+                    'message' => 'Transaction retry failed: ' . ($responseData['message'] ?? 'Unknown error'),
+                    'data' => [
+                        'transaction_id' => $transaction->transaction_id,
+                        'status' => 'failed',
+                        'retry_count' => $updateData['retry_count']
+                    ]
+                ];
+            }
+
+            // Update the transaction
+            DB::table('data_subscriptions')
+                ->where('transaction_id', $validated['transaction_id'])
+                ->update($updateData);
+
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            Log::error('Retry transaction error', [
+                'transaction_id' => $validated['transaction_id'],
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrying transaction: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get failed transactions for retry (latest per phone number)
+     */
+    public function getFailedTransactions(Request $request)
+    {
+        $page = $request->get('page', 1);
+        $perPage = $request->get('per_page', 100);
+
+        try {
+            // Get latest failed transaction per phone number
+            $failedTransactions = DB::table('data_subscriptions as ds1')
+                ->select([
+                    'ds1.*',
+                    'e.full_name',
+                    'e.code',
+                    'e.email'
+                ])
+                ->leftJoin('enumerators as e', 'ds1.enumerator_id', '=', 'e.id')
+                ->where('ds1.status', 'failed')
+                ->whereRaw('ds1.created_at = (
+                    SELECT MAX(ds2.created_at) 
+                    FROM data_subscriptions ds2 
+                    WHERE ds2.phone = ds1.phone AND ds2.status = "failed"
+                )')
+                ->orderBy('ds1.created_at', 'desc')
+                ->paginate($perPage, ['*'], 'page', $page);
+
+            return response()->json([
+                'success' => true,
+                'data' => $failedTransactions
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to get failed transactions', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching failed transactions'
+            ], 500);
+        }
+    }
+
+    /**
+     * Clean amount string
      */
     private function cleanAmount($amount)
     {
