@@ -24,4 +24,19 @@ class LGA extends Model
     {
         return $this->hasMany(Ward::class);
     }
+
+    public function pollingUnits()
+    {
+        return $this->hasManyThrough(PollingUnit::class, Ward::class);
+    }
+
+    public function enumerators()
+    {
+        return $this->hasMany(Enumerator::class, 'lga');
+    }
+
+    public function members()
+    {
+        return $this->hasManyThrough(ExternalMember::class, Enumerator::class, 'lga', 'agentcode');
+    }
 }

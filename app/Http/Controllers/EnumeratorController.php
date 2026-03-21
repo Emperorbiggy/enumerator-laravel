@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Enumerator;
-use App\Services\EnumeratorDataService;
+use App\Models\LGA;
+use App\Models\Ward;
+use App\Models\PollingUnit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Mail;
@@ -12,13 +14,6 @@ use Inertia\Inertia;
 
 class EnumeratorController extends Controller
 {
-    protected $dataService;
-
-    public function __construct(EnumeratorDataService $dataService)
-    {
-        $this->dataService = $dataService;
-    }
-
     /**
      * Get all LGAs
      */
@@ -26,19 +21,21 @@ class EnumeratorController extends Controller
     {
         $startTime = microtime(true);
         
-        Log::info('LGA Fetch Request Started', [
+        Log::info('LGA Fetch Request Started (Local DB)', [
             'ip' => request()->ip(),
             'user_agent' => request()->userAgent(),
             'timestamp' => now()->toISOString()
         ]);
 
         try {
-            $lgas = $this->dataService->getLGAs();
+            $lgas = LGA::select('id', 'name', 'code')
+                ->orderBy('name')
+                ->get();
             
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
             
-            Log::info('LGA Fetch Successful', [
-                'lgas_count' => is_array($lgas) ? count($lgas) : 0,
+            Log::info('LGA Fetch Successful (Local DB)', [
+                'lgas_count' => $lgas->count(),
                 'response_time_ms' => $responseTime,
                 'timestamp' => now()->toISOString()
             ]);
@@ -51,11 +48,9 @@ class EnumeratorController extends Controller
         } catch (\Exception $e) {
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
             
-            Log::error('LGA Fetch Failed', [
-                'error_message' => $e->getMessage(),
+            Log::error('LGA Fetch Failed (Local DB)', [
+                'error' => $e->getMessage(),
                 'error_code' => $e->getCode(),
-                'error_file' => $e->getFile(),
-                'error_line' => $e->getLine(),
                 'response_time_ms' => $responseTime,
                 'timestamp' => now()->toISOString()
             ]);
@@ -74,7 +69,7 @@ class EnumeratorController extends Controller
     {
         $startTime = microtime(true);
         
-        Log::info('Wards Fetch Request Started', [
+        Log::info('Wards Fetch Request Started (Local DB)', [
             'lga' => $request->lga,
             'ip' => request()->ip(),
             'timestamp' => now()->toISOString()
@@ -98,13 +93,29 @@ class EnumeratorController extends Controller
         }
 
         try {
-            $wards = $this->dataService->getWardsByLGA($request->lga);
+            // Find LGA by name or code
+            $lga = LGA::where('name', $request->lga)
+                ->orWhere('code', $request->lga)
+                ->first();
+
+            if (!$lga) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'LGA not found'
+                ], 404);
+            }
+
+            $wards = Ward::select('id', 'name', 'code')
+                ->where('lga_id', $lga->id)
+                ->orderBy('name')
+                ->get();
             
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
             
-            Log::info('Wards Fetch Successful', [
+            Log::info('Wards Fetch Successful (Local DB)', [
                 'lga' => $request->lga,
-                'wards_count' => is_array($wards) ? count($wards) : 0,
+                'lga_id' => $lga->id,
+                'wards_count' => $wards->count(),
                 'response_time_ms' => $responseTime,
                 'timestamp' => now()->toISOString()
             ]);
@@ -117,12 +128,10 @@ class EnumeratorController extends Controller
         } catch (\Exception $e) {
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
             
-            Log::error('Wards Fetch Failed', [
+            Log::error('Wards Fetch Failed (Local DB)', [
                 'lga' => $request->lga,
-                'error_message' => $e->getMessage(),
+                'error' => $e->getMessage(),
                 'error_code' => $e->getCode(),
-                'error_file' => $e->getFile(),
-                'error_line' => $e->getLine(),
                 'response_time_ms' => $responseTime,
                 'timestamp' => now()->toISOString()
             ]);
@@ -141,7 +150,7 @@ class EnumeratorController extends Controller
     {
         $startTime = microtime(true);
         
-        Log::info('Polling Units Fetch Request Started', [
+        Log::info('Polling Units Fetch Request Started (Local DB)', [
             'ward' => $request->ward,
             'ip' => request()->ip(),
             'timestamp' => now()->toISOString()
@@ -165,13 +174,29 @@ class EnumeratorController extends Controller
         }
 
         try {
-            $pollingUnits = $this->dataService->getPollingUnitsByWard($request->ward);
+            // Find Ward by name or code
+            $ward = Ward::where('name', $request->ward)
+                ->orWhere('code', $request->ward)
+                ->first();
+
+            if (!$ward) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ward not found'
+                ], 404);
+            }
+
+            $pollingUnits = PollingUnit::select('id', 'name', 'code', 'registered_voters')
+                ->where('ward_id', $ward->id)
+                ->orderBy('name')
+                ->get();
             
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
             
-            Log::info('Polling Units Fetch Successful', [
+            Log::info('Polling Units Fetch Successful (Local DB)', [
                 'ward' => $request->ward,
-                'polling_units_count' => is_array($pollingUnits) ? count($pollingUnits) : 0,
+                'ward_id' => $ward->id,
+                'polling_units_count' => $pollingUnits->count(),
                 'response_time_ms' => $responseTime,
                 'timestamp' => now()->toISOString()
             ]);
@@ -184,12 +209,10 @@ class EnumeratorController extends Controller
         } catch (\Exception $e) {
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
             
-            Log::error('Polling Units Fetch Failed', [
+            Log::error('Polling Units Fetch Failed (Local DB)', [
                 'ward' => $request->ward,
-                'error_message' => $e->getMessage(),
+                'error' => $e->getMessage(),
                 'error_code' => $e->getCode(),
-                'error_file' => $e->getFile(),
-                'error_line' => $e->getLine(),
                 'response_time_ms' => $responseTime,
                 'timestamp' => now()->toISOString()
             ]);

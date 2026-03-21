@@ -25,4 +25,19 @@ class Ward extends Model
     {
         return $this->belongsTo(LGA::class);
     }
+
+    public function pollingUnits()
+    {
+        return $this->hasMany(PollingUnit::class);
+    }
+
+    public function enumerators()
+    {
+        return $this->hasMany(Enumerator::class, 'ward');
+    }
+
+    public function members()
+    {
+        return $this->hasManyThrough(ExternalMember::class, Enumerator::class, 'ward', 'agentcode');
+    }
 }
