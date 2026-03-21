@@ -9,6 +9,8 @@ class LGA extends Model
 {
     use HasFactory;
 
+    protected $table = 'lgas';
+
     protected $fillable = [
         'name',
         'code',
