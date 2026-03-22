@@ -201,7 +201,8 @@ class AdminController extends Controller
             'offset' => $offset,
             'perPage' => $perPage,
             'sliced_count' => $slicedData->count(),
-            'sliced_codes' => $slicedData->take(5)->pluck('code')->toArray()
+            'sliced_codes' => $slicedData->take(5)->pluck('code')->toArray(),
+            'sliced_data_structure' => gettype($slicedData)
         ]);
         
         $paginated = new \Illuminate\Pagination\LengthAwarePaginator(
@@ -214,6 +215,13 @@ class AdminController extends Controller
                 'pageName' => 'page',
             ]
         );
+
+        Log::info('Enumerator Performance Direct - Paginator Created', [
+            'paginator_type' => get_class($paginated),
+            'has_data_property' => property_exists($paginated, 'data'),
+            'data_count' => method_exists($paginated, 'items') ? $paginated->items()->count() : 'N/A',
+            'paginator_array' => $paginated->toArray()
+        ]);
 
         return $paginated;
     }
