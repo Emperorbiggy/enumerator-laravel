@@ -969,7 +969,7 @@ class AdminController extends Controller
         $performanceData = [
             'members_registered' => $memberCount,
             'recent_members' => $recentMembers,
-            'registration_rate' => $memberCount > 0 ? round($memberCount / max(1, (new Date() - new Date($enumerator->registered_at)) / (1000 * 60 * 60 * 24)), 2) : 0,
+            'registration_rate' => $memberCount > 0 ? round($memberCount / max(1, (new \DateTime($enumerator->registered_at))->diff(new \DateTime())->days), 2) : 0,
         ];
 
         return Inertia::render('Admin/EnumeratorDetails', [
