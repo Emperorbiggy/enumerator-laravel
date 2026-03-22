@@ -196,17 +196,21 @@ class AdminController extends Controller
         
         $slicedData = $enumerators->slice($offset, $perPage);
         
+        // Convert to array to ensure proper indexing for frontend
+        $slicedDataArray = $slicedData->values()->toArray();
+        
         Log::info('Enumerator Performance Direct - After Slice', [
             'page' => $page,
             'offset' => $offset,
             'perPage' => $perPage,
             'sliced_count' => $slicedData->count(),
             'sliced_codes' => $slicedData->take(5)->pluck('code')->toArray(),
-            'sliced_data_structure' => gettype($slicedData)
+            'sliced_data_structure' => gettype($slicedData),
+            'final_array_count' => count($slicedDataArray)
         ]);
         
         $paginated = new \Illuminate\Pagination\LengthAwarePaginator(
-            $slicedData,
+            $slicedDataArray,
             $enumerators->count(),
             $perPage,
             $page,
