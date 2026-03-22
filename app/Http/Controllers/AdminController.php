@@ -1066,62 +1066,83 @@ class AdminController extends Controller
     private function generateEnumeratorCSV($exportData)
     {
         $csv = '';
-        $rowNumber = 1;
-
+        
+        // CSV Headers
+        $headers = [
+            'Enumerator Code',
+            'Full Name',
+            'Email Address',
+            'WhatsApp Number',
+            'Total Members Registered',
+            'Daily Registration Rate',
+            'Days Active',
+            'State',
+            'LGA',
+            'Ward',
+            'Polling Unit',
+            'Browsing Network',
+            'Browsing Number',
+            'Group Name',
+            'Coordinator Phone',
+            'Bank Name',
+            'Account Number',
+            'Account Name',
+            'Registration Date',
+            'Time Since Registration'
+        ];
+        
+        $csv .= implode(',', $headers) . "\n";
+        
+        // CSV Data Rows
         foreach ($exportData as $enumerator) {
-            $csv .= "Enumerator #{$rowNumber}\n";
-            $csv .= "\n";
+            $row = [
+                $enumerator['Personal Information']['Enumerator Code'],
+                $this->escapeCsv($enumerator['Personal Information']['Full Name']),
+                $this->escapeCsv($enumerator['Personal Information']['Email Address']),
+                $this->escapeCsv($enumerator['Personal Information']['WhatsApp Number']),
+                $enumerator['Performance Metrics']['Total Members Registered'],
+                $enumerator['Performance Metrics']['Daily Registration Rate'],
+                $enumerator['Performance Metrics']['Days Active'],
+                $this->escapeCsv($enumerator['Location Information']['State']),
+                $this->escapeCsv($enumerator['Location Information']['LGA']),
+                $this->escapeCsv($enumerator['Location Information']['Ward']),
+                $this->escapeCsv($enumerator['Location Information']['Polling Unit']),
+                $this->escapeCsv($enumerator['Contact & Network Information']['Browsing Network']),
+                $this->escapeCsv($enumerator['Contact & Network Information']['Browsing Number']),
+                $this->escapeCsv($enumerator['Contact & Network Information']['Group Name']),
+                $this->escapeCsv($enumerator['Contact & Network Information']['Coordinator Phone']),
+                $this->escapeCsv($enumerator['Bank Information']['Bank Name']),
+                $this->escapeCsv($enumerator['Bank Information']['Account Number']),
+                $this->escapeCsv($enumerator['Bank Information']['Account Name']),
+                $this->escapeCsv($enumerator['Registration Information']['Registration Date']),
+                $this->escapeCsv($enumerator['Registration Information']['Time Since Registration'])
+            ];
             
-            // Personal Information
-            $csv .= "Personal Information\n";
-            $csv .= "Enumerator Code," . $enumerator['Personal Information']['Enumerator Code'] . "\n";
-            $csv .= "Full Name," . $enumerator['Personal Information']['Full Name'] . "\n";
-            $csv .= "Email Address," . $enumerator['Personal Information']['Email Address'] . "\n";
-            $csv .= "WhatsApp Number," . $enumerator['Personal Information']['WhatsApp Number'] . "\n";
-            $csv .= "\n";
-            
-            // Performance Metrics
-            $csv .= "Performance Metrics\n";
-            $csv .= "Total Members Registered," . $enumerator['Performance Metrics']['Total Members Registered'] . "\n";
-            $csv .= "Daily Registration Rate," . $enumerator['Performance Metrics']['Daily Registration Rate'] . "\n";
-            $csv .= "Days Active," . $enumerator['Performance Metrics']['Days Active'] . "\n";
-            $csv .= "\n";
-            
-            // Location Information
-            $csv .= "Location Information\n";
-            $csv .= "State," . $enumerator['Location Information']['State'] . "\n";
-            $csv .= "LGA," . $enumerator['Location Information']['LGA'] . "\n";
-            $csv .= "Ward," . $enumerator['Location Information']['Ward'] . "\n";
-            $csv .= "Polling Unit," . $enumerator['Location Information']['Polling Unit'] . "\n";
-            $csv .= "\n";
-            
-            // Contact & Network Information
-            $csv .= "Contact & Network Information\n";
-            $csv .= "Browsing Network," . $enumerator['Contact & Network Information']['Browsing Network'] . "\n";
-            $csv .= "Browsing Number," . $enumerator['Contact & Network Information']['Browsing Number'] . "\n";
-            $csv .= "Group Name," . $enumerator['Contact & Network Information']['Group Name'] . "\n";
-            $csv .= "Coordinator Phone," . $enumerator['Contact & Network Information']['Coordinator Phone'] . "\n";
-            $csv .= "\n";
-            
-            // Bank Information
-            $csv .= "Bank Information\n";
-            $csv .= "Bank Name," . $enumerator['Bank Information']['Bank Name'] . "\n";
-            $csv .= "Account Number," . $enumerator['Bank Information']['Account Number'] . "\n";
-            $csv .= "Account Name," . $enumerator['Bank Information']['Account Name'] . "\n";
-            $csv .= "\n";
-            
-            // Registration Information
-            $csv .= "Registration Information\n";
-            $csv .= "Registration Date," . $enumerator['Registration Information']['Registration Date'] . "\n";
-            $csv .= "Time Since Registration," . $enumerator['Registration Information']['Time Since Registration'] . "\n";
-            $csv .= "\n";
-            $csv .= str_repeat("-", 80) . "\n";
-            $csv .= "\n";
-            
-            $rowNumber++;
+            $csv .= implode(',', $row) . "\n";
         }
 
         return $csv;
+    }
+
+    /**
+     * Escape CSV values to handle commas and quotes
+     */
+    private function escapeCsv($value)
+    {
+        if (is_null($value)) {
+            return '';
+        }
+        
+        // Convert to string and remove line breaks
+        $value = (string) $value;
+        $value = str_replace(["\r", "\n"], '', $value);
+        
+        // If value contains comma, quote, or newline, wrap in quotes and escape existing quotes
+        if (strpos($value, ',') !== false || strpos($value, '"') !== false) {
+            $value = '"' . str_replace('"', '""', $value) . '"';
+        }
+        
+        return $value;
     }
 
     /**
