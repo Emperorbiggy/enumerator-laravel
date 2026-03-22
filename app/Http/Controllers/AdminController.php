@@ -946,8 +946,34 @@ class AdminController extends Controller
 
     public function showEnumerator(Enumerator $enumerator)
     {
+        // Get performance data for this enumerator (normalized agent code)
+        $normalizedCode = (int)$enumerator->code;
+        
+        // Get member count from external database
+        $memberCount = DB::connection('external_mysql')
+            ->table('members')
+            ->select(DB::raw('CAST(agentcode AS UNSIGNED) as normalized_code, COUNT(*) as count'))
+            ->where(DB::raw('CAST(agentcode AS UNSIGNED)'), $normalizedCode)
+            ->groupBy(DB::raw('CAST(agentcode AS UNSIGNED)'))
+            ->value('count') ?? 0;
+
+        // Get recent members registered by this enumerator
+        $recentMembers = DB::connection('external_mysql')
+            ->table('members')
+            ->where(DB::raw('CAST(agentcode AS UNSIGNED)'), $normalizedCode)
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get(['fullname', 'phone', 'gender', 'created_at']);
+
+        $performanceData = [
+            'members_registered' => $memberCount,
+            'recent_members' => $recentMembers,
+            'registration_rate' => $memberCount > 0 ? round($memberCount / max(1, (new Date() - new Date($enumerator->registered_at)) / (1000 * 60 * 60 * 24)), 2) : 0,
+        ];
+
         return Inertia::render('Admin/EnumeratorDetails', [
             'enumerator' => $enumerator,
+            'performance' => $performanceData,
         ]);
     }
 

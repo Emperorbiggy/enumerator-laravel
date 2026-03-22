@@ -1,8 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 
-export default function EnumeratorDetails({ enumerator }) {
+export default function EnumeratorDetails({ enumerator, performance }) {
+    const [copied, setCopied] = useState('');
+
+    const copyToClipboard = (text, field) => {
+        navigator.clipboard.writeText(text);
+        setCopied(field);
+        setTimeout(() => setCopied(''), 2000);
+    };
+
+    const CopyButton = ({ text, field, label }) => (
+        <button
+            onClick={() => copyToClipboard(text, field)}
+            className="ml-2 px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+        >
+            {copied === field ? 'Copied!' : `Copy ${label}`}
+        </button>
+    );
     return (
         <AdminLayout title={`Enumerator Details - ${enumerator.full_name}`}>
             <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -23,15 +39,95 @@ export default function EnumeratorDetails({ enumerator }) {
                                 </div>
                                 <div>
                                     <dt className="text-sm font-medium text-gray-500">Email Address</dt>
-                                    <dd className="mt-1 text-sm text-gray-900">{enumerator.email}</dd>
+                                    <dd className="mt-1 text-sm text-gray-900 flex items-center">
+                                        {enumerator.email}
+                                        {enumerator.email && <CopyButton text={enumerator.email} field="email" label="Email" />}
+                                    </dd>
                                 </div>
                                 <div>
                                     <dt className="text-sm font-medium text-gray-500">WhatsApp Number</dt>
-                                    <dd className="mt-1 text-sm text-gray-900">{enumerator.whatsapp}</dd>
+                                    <dd className="mt-1 text-sm text-gray-900 flex items-center">
+                                        {enumerator.whatsapp}
+                                        {enumerator.whatsapp && <CopyButton text={enumerator.whatsapp} field="whatsapp" label="WhatsApp" />}
+                                    </dd>
                                 </div>
                             </dl>
                         </div>
                     </div>
+
+                    {/* Performance Metrics */}
+                    <div className="mt-6 bg-white shadow overflow-hidden sm:rounded-lg">
+                        <div className="px-4 py-5 sm:px-6">
+                            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+                                Performance Metrics
+                            </h3>
+                            <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-3">
+                                <div className="bg-blue-50 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-blue-600">Total Members Registered</dt>
+                                    <dd className="mt-2 text-3xl font-bold text-blue-900">{performance?.members_registered || 0}</dd>
+                                </div>
+                                <div className="bg-green-50 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-green-600">Daily Registration Rate</dt>
+                                    <dd className="mt-2 text-3xl font-bold text-green-900">{performance?.registration_rate || 0}</dd>
+                                </div>
+                                <div className="bg-purple-50 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-purple-600">Days Active</dt>
+                                    <dd className="mt-2 text-3xl font-bold text-purple-900">
+                                        {Math.floor((new Date() - new Date(enumerator.registered_at)) / (1000 * 60 * 60 * 24))}
+                                    </dd>
+                                </div>
+                            </dl>
+                        </div>
+                    </div>
+
+                    {/* Recent Members */}
+                    {performance?.recent_members && performance.recent_members.length > 0 && (
+                        <div className="mt-6 bg-white shadow overflow-hidden sm:rounded-lg">
+                            <div className="px-4 py-5 sm:px-6">
+                                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+                                    Recent Members Registered (Last 5)
+                                </h3>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    Name
+                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    Phone
+                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    Gender
+                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    Registration Date
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {performance.recent_members.map((member, index) => (
+                                                <tr key={index}>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                        {member.fullname}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                        {member.phone}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                        {member.gender}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                        {new Date(member.created_at).toLocaleDateString()}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Location Information */}
                     <div className="mt-6 bg-white shadow overflow-hidden sm:rounded-lg">
@@ -96,15 +192,24 @@ export default function EnumeratorDetails({ enumerator }) {
                             <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
                                 <div>
                                     <dt className="text-sm font-medium text-gray-500">Bank Name</dt>
-                                    <dd className="mt-1 text-sm text-gray-900">{enumerator.bank_name}</dd>
+                                    <dd className="mt-1 text-sm text-gray-900 flex items-center">
+                                        {enumerator.bank_name}
+                                        {enumerator.bank_name && <CopyButton text={enumerator.bank_name} field="bank_name" label="Bank" />}
+                                    </dd>
                                 </div>
                                 <div>
                                     <dt className="text-sm font-medium text-gray-500">Account Number</dt>
-                                    <dd className="mt-1 text-sm text-gray-900">{enumerator.account_number}</dd>
+                                    <dd className="mt-1 text-sm text-gray-900 flex items-center">
+                                        {enumerator.account_number}
+                                        {enumerator.account_number && <CopyButton text={enumerator.account_number} field="account_number" label="Account" />}
+                                    </dd>
                                 </div>
                                 <div className="sm:col-span-2">
                                     <dt className="text-sm font-medium text-gray-500">Account Name</dt>
-                                    <dd className="mt-1 text-sm text-gray-900">{enumerator.account_name}</dd>
+                                    <dd className="mt-1 text-sm text-gray-900 flex items-center">
+                                        {enumerator.account_name}
+                                        {enumerator.account_name && <CopyButton text={enumerator.account_name} field="account_name" label="Name" />}
+                                    </dd>
                                 </div>
                             </dl>
                         </div>
