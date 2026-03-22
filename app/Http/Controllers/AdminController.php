@@ -98,6 +98,9 @@ class AdminController extends Controller
         
         Log::info('Admin: Enumerator Performance Request Started', [
             'ip' => $request->ip(),
+            'page' => $request->get('page', 1),
+            'all_params' => $request->all(),
+            'url' => $request->fullUrl(),
             'timestamp' => now()->toISOString()
         ]);
 
@@ -113,6 +116,8 @@ class AdminController extends Controller
             
             Log::info('Admin: Enumerator Performance Successful', [
                 'enumerators_count' => $enumerators->count(),
+                'current_page' => $enumerators->currentPage(),
+                'total_pages' => $enumerators->lastPage(),
                 'response_time_ms' => $responseTime,
                 'timestamp' => now()->toISOString()
             ]);
@@ -192,7 +197,7 @@ class AdminController extends Controller
             $perPage,
             $page,
             [
-                'path' => request()->url(),
+                'path' => route('admin.enumerator.performance'),
                 'pageName' => 'page',
             ]
         );
