@@ -979,6 +979,152 @@ class AdminController extends Controller
     }
 
     /**
+     * Export all enumerators with performance metrics and details
+     */
+    public function exportEnumerators()
+    {
+        try {
+            // Get all enumerators with their performance data
+            $enumerators = Enumerator::all();
+            
+            // Get member counts for all enumerators (normalized)
+            $memberCounts = DB::connection('external_mysql')
+                ->table('members')
+                ->select(DB::raw('CAST(agentcode AS UNSIGNED) as normalized_code, COUNT(*) as count'))
+                ->groupBy(DB::raw('CAST(agentcode AS UNSIGNED)'))
+                ->pluck('count', 'normalized_code');
+
+            $exportData = [];
+
+            foreach ($enumerators as $enumerator) {
+                $normalizedCode = (int)$enumerator->code;
+                $memberCount = $memberCounts->get($normalizedCode, 0);
+                
+                // Calculate days since registration
+                $daysSinceRegistration = (new \DateTime($enumerator->registered_at))->diff(new \DateTime())->days;
+                $registrationRate = $memberCount > 0 && $daysSinceRegistration > 0 ? round($memberCount / $daysSinceRegistration, 2) : 0;
+
+                $exportData[] = [
+                    'Personal Information' => [
+                        'Enumerator Code' => $enumerator->code,
+                        'Full Name' => $enumerator->full_name,
+                        'Email Address' => $enumerator->email,
+                        'WhatsApp Number' => $enumerator->whatsapp,
+                    ],
+                    'Performance Metrics' => [
+                        'Total Members Registered' => $memberCount,
+                        'Daily Registration Rate' => $registrationRate,
+                        'Days Active' => $daysSinceRegistration,
+                    ],
+                    'Location Information' => [
+                        'State' => $enumerator->state,
+                        'LGA' => $enumerator->lga,
+                        'Ward' => $enumerator->ward,
+                        'Polling Unit' => $enumerator->polling_unit,
+                    ],
+                    'Contact & Network Information' => [
+                        'Browsing Network' => $enumerator->browsing_network,
+                        'Browsing Number' => $enumerator->browsing_number,
+                        'Group Name' => $enumerator->group_name,
+                        'Coordinator Phone' => $enumerator->coordinator_phone,
+                    ],
+                    'Bank Information' => [
+                        'Bank Name' => $enumerator->bank_name,
+                        'Account Number' => $enumerator->account_number,
+                        'Account Name' => $enumerator->account_name,
+                    ],
+                    'Registration Information' => [
+                        'Registration Date' => (new \DateTime($enumerator->registered_at))->format('l, F d, Y \a\t h:i A'),
+                        'Time Since Registration' => $daysSinceRegistration . ' days ago',
+                    ],
+                ];
+            }
+
+            // Generate CSV content
+            $csvContent = $this->generateEnumeratorCSV($exportData);
+            
+            // Return CSV download
+            $filename = 'enumerators_export_' . date('Y-m-d_H-i-s') . '.csv';
+            
+            return response($csvContent)
+                ->header('Content-Type', 'text/csv')
+                ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+
+        } catch (\Exception $e) {
+            Log::error('Enumerator Export Failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return back()->with('error', 'Export failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Generate CSV content from enumerator data
+     */
+    private function generateEnumeratorCSV($exportData)
+    {
+        $csv = '';
+        $rowNumber = 1;
+
+        foreach ($exportData as $enumerator) {
+            $csv .= "Enumerator #{$rowNumber}\n";
+            $csv .= "\n";
+            
+            // Personal Information
+            $csv .= "Personal Information\n";
+            $csv .= "Enumerator Code," . $enumerator['Personal Information']['Enumerator Code'] . "\n";
+            $csv .= "Full Name," . $enumerator['Personal Information']['Full Name'] . "\n";
+            $csv .= "Email Address," . $enumerator['Personal Information']['Email Address'] . "\n";
+            $csv .= "WhatsApp Number," . $enumerator['Personal Information']['WhatsApp Number'] . "\n";
+            $csv .= "\n";
+            
+            // Performance Metrics
+            $csv .= "Performance Metrics\n";
+            $csv .= "Total Members Registered," . $enumerator['Performance Metrics']['Total Members Registered'] . "\n";
+            $csv .= "Daily Registration Rate," . $enumerator['Performance Metrics']['Daily Registration Rate'] . "\n";
+            $csv .= "Days Active," . $enumerator['Performance Metrics']['Days Active'] . "\n";
+            $csv .= "\n";
+            
+            // Location Information
+            $csv .= "Location Information\n";
+            $csv .= "State," . $enumerator['Location Information']['State'] . "\n";
+            $csv .= "LGA," . $enumerator['Location Information']['LGA'] . "\n";
+            $csv .= "Ward," . $enumerator['Location Information']['Ward'] . "\n";
+            $csv .= "Polling Unit," . $enumerator['Location Information']['Polling Unit'] . "\n";
+            $csv .= "\n";
+            
+            // Contact & Network Information
+            $csv .= "Contact & Network Information\n";
+            $csv .= "Browsing Network," . $enumerator['Contact & Network Information']['Browsing Network'] . "\n";
+            $csv .= "Browsing Number," . $enumerator['Contact & Network Information']['Browsing Number'] . "\n";
+            $csv .= "Group Name," . $enumerator['Contact & Network Information']['Group Name'] . "\n";
+            $csv .= "Coordinator Phone," . $enumerator['Contact & Network Information']['Coordinator Phone'] . "\n";
+            $csv .= "\n";
+            
+            // Bank Information
+            $csv .= "Bank Information\n";
+            $csv .= "Bank Name," . $enumerator['Bank Information']['Bank Name'] . "\n";
+            $csv .= "Account Number," . $enumerator['Bank Information']['Account Number'] . "\n";
+            $csv .= "Account Name," . $enumerator['Bank Information']['Account Name'] . "\n";
+            $csv .= "\n";
+            
+            // Registration Information
+            $csv .= "Registration Information\n";
+            $csv .= "Registration Date," . $enumerator['Registration Information']['Registration Date'] . "\n";
+            $csv .= "Time Since Registration," . $enumerator['Registration Information']['Time Since Registration'] . "\n";
+            $csv .= "\n";
+            $csv .= str_repeat("-", 80) . "\n";
+            $csv .= "\n";
+            
+            $rowNumber++;
+        }
+
+        return $csv;
+    }
+
+    /**
      * Send batch data to selected enumerators
      */
     public function sendBatchData(Request $request)
