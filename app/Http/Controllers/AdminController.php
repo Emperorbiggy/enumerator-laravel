@@ -960,10 +960,11 @@ class AdminController extends Controller
         // Get recent members registered by this enumerator
         $recentMembers = DB::connection('external_mysql')
             ->table('members')
+            ->select(DB::raw('first_name, last_name, gender, phone_number, registration_date'))
             ->where(DB::raw('CAST(agentcode AS UNSIGNED)'), $normalizedCode)
-            ->orderBy('created_at', 'desc')
+            ->orderBy('registration_date', 'desc')
             ->limit(5)
-            ->get(['fullname', 'phone', 'gender', 'created_at']);
+            ->get();
 
         $performanceData = [
             'members_registered' => $memberCount,

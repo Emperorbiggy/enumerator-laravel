@@ -109,16 +109,16 @@ export default function EnumeratorDetails({ enumerator, performance }) {
                                             {performance.recent_members.map((member, index) => (
                                                 <tr key={index}>
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                        {member.fullname}
+                                                        {member.first_name} {member.last_name}
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                        {member.phone}
+                                                        {member.phone_number}
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                         {member.gender}
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                        {new Date(member.created_at).toLocaleDateString()}
+                                                        {new Date(member.registration_date).toLocaleDateString()}
                                                     </td>
                                                 </tr>
                                             ))}
