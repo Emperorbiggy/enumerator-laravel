@@ -219,7 +219,7 @@ class AdminController extends Controller
         Log::info('Enumerator Performance Direct - Paginator Created', [
             'paginator_type' => get_class($paginated),
             'has_data_property' => property_exists($paginated, 'data'),
-            'data_count' => method_exists($paginated, 'items') ? $paginated->items()->count() : 'N/A',
+            'data_count' => method_exists($paginated, 'items') ? (is_array($paginated->items()) ? count($paginated->items()) : $paginated->items()->count()) : 'N/A',
             'paginator_array' => $paginated->toArray()
         ]);
 
