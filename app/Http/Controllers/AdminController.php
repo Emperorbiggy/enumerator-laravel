@@ -171,8 +171,15 @@ class AdminController extends Controller
             $enumerator->members_registered = $memberCounts->get($normalizedCode, 0);
         });
 
-        // Sort by member count
+        // Sort by member count (descending)
         $enumerators = $enumerators->sortByDesc('members_registered')->values();
+
+        // Log for debugging
+        Log::info('Enumerator Performance Direct', [
+            'total_enumerators' => $enumerators->count(),
+            'page' => request()->get('page', 1),
+            'top_5' => $enumerators->take(5)->pluck('code')->toArray()
+        ]);
 
         // Manually paginate
         $page = request()->get('page', 1);
@@ -183,7 +190,11 @@ class AdminController extends Controller
             $enumerators->slice($offset, $perPage),
             $enumerators->count(),
             $perPage,
-            $page
+            $page,
+            [
+                'path' => request()->url(),
+                'pageName' => 'page',
+            ]
         );
 
         return $paginated;
