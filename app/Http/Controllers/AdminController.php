@@ -102,67 +102,12 @@ class AdminController extends Controller
         ]);
 
         try {
-            // Try using the relationship first
-            try {
-                // Get all enumerators with their member counts (normalized agent codes)
-                $enumerators = Enumerator::select('id', 'code', 'full_name', 'email', 'whatsapp', 'lga', 'ward', 'registered_at')
-                    ->withCount(['externalMembers as members_registered' => function($query) {
-                        $query->whereRaw('CAST(agentcode AS UNSIGNED) = CAST(enumerators.code AS UNSIGNED)');
-                    }])
-                    ->orderBy('members_registered', 'desc')
-                    ->paginate(50);
-
-                // Get performance statistics with normalized agent codes
-                $stats = [
-                    'total_enumerators' => Enumerator::count(),
-                    'total_members_registered' => ExternalMember::count(),
-                    'enumerators_with_members' => Enumerator::whereHas('externalMembers', function($query) {
-                        $query->whereRaw('CAST(agentcode AS UNSIGNED) = CAST(enumerators.code AS UNSIGNED)');
-                    })->count(),
-                    'enumerators_without_members' => Enumerator::whereDoesntHave('externalMembers', function($query) {
-                        $query->whereRaw('CAST(agentcode AS UNSIGNED) = CAST(enumerators.code AS UNSIGNED)');
-                    })->count(),
-                    'average_members_per_enumerator' => ExternalMember::count() / max(Enumerator::count(), 1),
-                    'top_performer' => Enumerator::withCount(['externalMembers as members_registered' => function($query) {
-                        $query->whereRaw('CAST(agentcode AS UNSIGNED) = CAST(enumerators.code AS UNSIGNED)');
-                    }])
-                        ->orderBy('members_registered', 'desc')
-                        ->first(),
-                ];
-
-                // Top performers with normalized agent codes
-                $topPerformers = Enumerator::withCount(['externalMembers as members_registered' => function($query) {
-                        $query->whereRaw('CAST(agentcode AS UNSIGNED) = CAST(enumerators.code AS UNSIGNED)');
-                    }])
-                    ->orderBy('members_registered', 'desc')
-                    ->limit(10)
-                    ->get(['id', 'code', 'full_name', 'email', 'lga', 'members_registered']);
-
-                // Performance by LGA with normalized agent codes
-                $performanceByLga = Enumerator::select('lga', DB::raw('COUNT(*) as enumerator_count'), DB::raw('SUM(external_members_count) as total_members'))
-                    ->joinSub(
-                        ExternalMember::select('agentcode', DB::raw('COUNT(*) as external_members_count'))
-                            ->groupBy(DB::raw('CAST(agentcode AS UNSIGNED)')),
-                        'member_counts',
-                        function($join) {
-                            $join->on(DB::raw('CAST(enumerators.code AS UNSIGNED)'), '=', DB::raw('CAST(member_counts.agentcode AS UNSIGNED)'));
-                        }
-                    )
-                    ->groupBy('lga')
-                    ->orderBy('total_members', 'desc')
-                    ->get();
-
-            } catch (\Exception $relationError) {
-                Log::warning('Admin: Relationship method failed, using direct connection', [
-                    'error' => $relationError->getMessage()
-                ]);
-
-                // Fallback: Use direct database connection
-                $enumerators = $this->getEnumeratorPerformanceDirect();
-                $stats = $this->getPerformanceStatsDirect();
-                $topPerformers = $this->getTopPerformersDirect();
-                $performanceByLga = $this->getPerformanceByLgaDirect();
-            }
+            // Skip relationship method due to permission issues and use direct connection
+            Log::info('Admin: Using direct connection method due to database permissions');
+            $enumerators = $this->getEnumeratorPerformanceDirect();
+            $stats = $this->getPerformanceStatsDirect();
+            $topPerformers = $this->getTopPerformersDirect();
+            $performanceByLga = $this->getPerformanceByLgaDirect();
 
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
             
@@ -216,15 +161,9 @@ class AdminController extends Controller
         // Get member counts from external database with normalized agent codes
         $memberCounts = DB::connection('external_mysql')
             ->table('members')
-            ->select('agentcode', DB::raw('COUNT(*) as count'))
+            ->select(DB::raw('CAST(agentcode AS UNSIGNED) as normalized_code, COUNT(*) as count'))
             ->groupBy(DB::raw('CAST(agentcode AS UNSIGNED)'))
-            ->get()
-            ->groupBy(function($item) {
-                return (int)$item->agentcode; // Normalize to integer
-            })
-            ->map(function($group) {
-                return $group->sum('count'); // Sum counts for same normalized code
-            });
+            ->pluck('count', 'normalized_code');
 
         // Attach member counts to enumerators (normalize both sides)
         $enumerators->each(function ($enumerator) use ($memberCounts) {
@@ -261,15 +200,9 @@ class AdminController extends Controller
         // Get member counts by agent code (normalized)
         $memberCounts = DB::connection('external_mysql')
             ->table('members')
-            ->select('agentcode', DB::raw('COUNT(*) as count'))
+            ->select(DB::raw('CAST(agentcode AS UNSIGNED) as normalized_code, COUNT(*) as count'))
             ->groupBy(DB::raw('CAST(agentcode AS UNSIGNED)'))
-            ->get()
-            ->groupBy(function($item) {
-                return (int)$item->agentcode; // Normalize to integer
-            })
-            ->map(function($group) {
-                return $group->sum('count'); // Sum counts for same normalized code
-            });
+            ->pluck('count', 'normalized_code');
 
         $enumeratorsWithMembers = 0;
         $topPerformerCount = 0;
@@ -307,19 +240,11 @@ class AdminController extends Controller
         // Get member counts by agent code (normalized)
         $memberCounts = DB::connection('external_mysql')
             ->table('members')
-            ->select('agentcode', DB::raw('COUNT(*) as count'))
+            ->select(DB::raw('CAST(agentcode AS UNSIGNED) as normalized_code, COUNT(*) as count'))
             ->groupBy(DB::raw('CAST(agentcode AS UNSIGNED)'))
-            ->get()
-            ->groupBy(function($item) {
-                return (int)$item->agentcode; // Normalize to integer
-            })
-            ->map(function($group) {
-                return $group->sum('count'); // Sum counts for same normalized code
-            })
-            ->sortByDesc(function($count) {
-                return $count;
-            })
-            ->take(10);
+            ->orderBy('count', 'desc')
+            ->limit(10)
+            ->pluck('count', 'normalized_code');
 
         $topPerformers = collect();
         foreach ($memberCounts as $normalizedCode => $count) {
@@ -341,15 +266,9 @@ class AdminController extends Controller
         // Get member counts by agent code (normalized)
         $memberCounts = DB::connection('external_mysql')
             ->table('members')
-            ->select('agentcode', DB::raw('COUNT(*) as count'))
+            ->select(DB::raw('CAST(agentcode AS UNSIGNED) as normalized_code, COUNT(*) as count'))
             ->groupBy(DB::raw('CAST(agentcode AS UNSIGNED)'))
-            ->get()
-            ->groupBy(function($item) {
-                return (int)$item->agentcode; // Normalize to integer
-            })
-            ->map(function($group) {
-                return $group->sum('count'); // Sum counts for same normalized code
-            });
+            ->pluck('count', 'normalized_code');
 
         // Group by LGA
         $lgaPerformance = Enumerator::all()->groupBy('lga')->map(function ($enumerators, $lga) use ($memberCounts) {
