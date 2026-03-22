@@ -180,10 +180,13 @@ class AdminController extends Controller
         $enumerators = $enumerators->sortByDesc('members_registered')->values();
 
         // Log for debugging
-        Log::info('Enumerator Performance Direct', [
+        Log::info('Enumerator Performance Direct - Before Pagination', [
             'total_enumerators' => $enumerators->count(),
             'page' => request()->get('page', 1),
-            'top_5' => $enumerators->take(5)->pluck('code')->toArray()
+            'perPage' => 50,
+            'offset' => (request()->get('page', 1) - 1) * 50,
+            'top_5_codes' => $enumerators->take(5)->pluck('code')->toArray(),
+            'bottom_5_codes' => $enumerators->slice(-5)->pluck('code')->toArray()
         ]);
 
         // Manually paginate
@@ -191,8 +194,18 @@ class AdminController extends Controller
         $perPage = 50;
         $offset = ($page - 1) * $perPage;
         
+        $slicedData = $enumerators->slice($offset, $perPage);
+        
+        Log::info('Enumerator Performance Direct - After Slice', [
+            'page' => $page,
+            'offset' => $offset,
+            'perPage' => $perPage,
+            'sliced_count' => $slicedData->count(),
+            'sliced_codes' => $slicedData->take(5)->pluck('code')->toArray()
+        ]);
+        
         $paginated = new \Illuminate\Pagination\LengthAwarePaginator(
-            $enumerators->slice($offset, $perPage),
+            $slicedData,
             $enumerators->count(),
             $perPage,
             $page,
