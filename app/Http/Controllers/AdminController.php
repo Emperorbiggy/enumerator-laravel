@@ -1147,10 +1147,24 @@ class AdminController extends Controller
      */
     private function sendDataToIndividual($performer, $planCode, $network)
     {
+        Log::info('NEW INDIVIDUAL API METHOD CALLED - This should prove new code is running', [
+            'performer_id' => $performer->id,
+            'plan_code' => $planCode,
+            'network' => $network,
+            'timestamp' => now()->toISOString()
+        ]);
+
         try {
             // Get API configuration (same as bulk sending)
             $apiUrl = config('services.data_api.url');
             $apiToken = config('services.data_api.token');
+
+            Log::info('API Configuration Check', [
+                'api_url' => $apiUrl,
+                'api_token_set' => !empty($apiToken),
+                'config_url' => config('services.data_api.url'),
+                'config_token_prefix' => substr(config('services.data_api.token', ''), 0, 10) . '...'
+            ]);
 
             if (!$apiUrl || !$apiToken) {
                 Log::error('API configuration missing for individual data sending', [
