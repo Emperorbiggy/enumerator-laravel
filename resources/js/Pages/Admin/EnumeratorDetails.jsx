@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
+import React, { useState, useEffect } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 
 export default function EnumeratorDetails({ enumerator, performance }) {
@@ -10,6 +10,9 @@ export default function EnumeratorDetails({ enumerator, performance }) {
         browsing_number: enumerator.browsing_number || '',
     });
     const [isSaving, setIsSaving] = useState(false);
+    const [toast, setToast] = useState(null);
+    
+    const { flash } = usePage().props;
 
     const networks = [
         'MTN',
@@ -18,6 +21,23 @@ export default function EnumeratorDetails({ enumerator, performance }) {
         '9MOBILE',
         'ETISALAT',
     ];
+
+    // Show toast if there's a flash message
+    useEffect(() => {
+        if (flash?.success) {
+            showToast(flash.success, 'success');
+        }
+        if (flash?.error) {
+            showToast(flash.error, 'error');
+        }
+    }, [flash]);
+
+    const showToast = (message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => {
+            setToast(null);
+        }, 3000);
+    };
 
     const copyToClipboard = (text, field) => {
         navigator.clipboard.writeText(text);
@@ -49,23 +69,20 @@ export default function EnumeratorDetails({ enumerator, performance }) {
             route('admin.enumerators.update', enumerator.id),
             editForm,
             {
-                onSuccess: (page) => {
+                onSuccess: () => {
                     setIsEditing(false);
                     setIsSaving(false);
-                    // Show success message from flash session
-                    if (page.props.flash?.success) {
-                        alert(page.props.flash.success);
-                    }
+                    // Toast will be shown by useEffect when flash message arrives
                 },
                 onError: (errors) => {
                     setIsSaving(false);
-                    // Show error message
+                    // Show error message as toast
                     if (errors.browsing_number) {
-                        alert(errors.browsing_number);
+                        showToast(errors.browsing_number, 'error');
                     } else if (errors.general) {
-                        alert(errors.general);
+                        showToast(errors.general, 'error');
                     } else {
-                        alert('Failed to update browsing details. Please try again.');
+                        showToast('Failed to update browsing details. Please try again.', 'error');
                     }
                 },
                 preserveScroll: true,
@@ -383,6 +400,52 @@ export default function EnumeratorDetails({ enumerator, performance }) {
                                             className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
                                         >
                                             {isSaving ? 'Saving...' : 'Save Changes'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Toast Notification */}
+                    {toast && (
+                        <div className={`fixed top-4 right-4 z-50 max-w-sm w-full bg-white shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden transform transition-all duration-300 ease-in-out ${
+                            toast.type === 'success' ? 'border-l-4 border-green-500' : 'border-l-4 border-red-500'
+                        }`}>
+                            <div className="p-4">
+                                <div className="flex items-start">
+                                    <div className="flex-shrink-0">
+                                        {toast.type === 'success' ? (
+                                            <svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        ) : (
+                                            <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        )}
+                                    </div>
+                                    <div className="ml-3 w-0 flex-1 pt-0.5">
+                                        <p className={`text-sm font-medium ${
+                                            toast.type === 'success' ? 'text-green-900' : 'text-red-900'
+                                        }`}>
+                                            {toast.type === 'success' ? 'Success' : 'Error'}
+                                        </p>
+                                        <p className={`mt-1 text-sm ${
+                                            toast.type === 'success' ? 'text-green-700' : 'text-red-700'
+                                        }`}>
+                                            {toast.message}
+                                        </p>
+                                    </div>
+                                    <div className="ml-4 flex-shrink-0 flex">
+                                        <button
+                                            className="bg-white rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                                            onClick={() => setToast(null)}
+                                        >
+                                            <span className="sr-only">Dismiss</span>
+                                            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                            </svg>
                                         </button>
                                     </div>
                                 </div>
