@@ -1009,10 +1009,9 @@ class AdminController extends Controller
                 ->first();
 
             if ($existingEnumerator) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This browsing number is already attached to another enumerator: ' . $existingEnumerator->full_name . ' (Code: ' . $existingEnumerator->code . ')'
-                ], 422);
+                return back()->withErrors([
+                    'browsing_number' => 'This browsing number is already attached to another enumerator: ' . $existingEnumerator->full_name . ' (Code: ' . $existingEnumerator->code . ')'
+                ])->withInput();
             }
 
             // Log the change
@@ -1031,21 +1030,10 @@ class AdminController extends Controller
                 'browsing_number' => $validated['browsing_number'],
             ]);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Browsing details updated successfully',
-                'data' => [
-                    'browsing_network' => $enumerator->browsing_network,
-                    'browsing_number' => $enumerator->browsing_number,
-                ]
-            ]);
+            return back()->with('success', 'Browsing details updated successfully');
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
+            return back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
             Log::error('Failed to update enumerator browsing details', [
                 'enumerator_id' => $enumerator->id,
@@ -1053,10 +1041,9 @@ class AdminController extends Controller
                 'trace' => $e->getTraceAsString()
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update browsing details: ' . $e->getMessage()
-            ], 500);
+            return back()->withErrors([
+                'general' => 'Failed to update browsing details: ' . $e->getMessage()
+            ])->withInput();
         }
     }
 

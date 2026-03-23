@@ -52,14 +52,18 @@ export default function EnumeratorDetails({ enumerator, performance }) {
                 onSuccess: (page) => {
                     setIsEditing(false);
                     setIsSaving(false);
-                    // Show success message
-                    alert('Browsing details updated successfully!');
+                    // Show success message from flash session
+                    if (page.props.flash?.success) {
+                        alert(page.props.flash.success);
+                    }
                 },
                 onError: (errors) => {
                     setIsSaving(false);
                     // Show error message
                     if (errors.browsing_number) {
                         alert(errors.browsing_number);
+                    } else if (errors.general) {
+                        alert(errors.general);
                     } else {
                         alert('Failed to update browsing details. Please try again.');
                     }
