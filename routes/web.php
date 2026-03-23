@@ -34,6 +34,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/enumerator/{code}/members', [AdminController::class, 'showEnumeratorMembers'])->name('enumerator.members');
     Route::get('/enumerators/export', [AdminController::class, 'exportEnumerators'])->name('enumerators.export');
     Route::get('/enumerators/{enumerator}', [AdminController::class, 'showEnumerator'])->name('enumerators.show');
+    Route::put('/enumerators/{enumerator}', [AdminController::class, 'updateEnumerator'])->name('enumerators.update');
     Route::get('/data-sub', [AdminController::class, 'dataSub'])->name('data.sub');
     Route::get('/data-sub-transactions', [AdminController::class, 'dataSubTransactions'])->name('data.sub.transactions');
     Route::post('/send-batch-data', [AdminController::class, 'sendBatchData'])->name('send.batch.data');

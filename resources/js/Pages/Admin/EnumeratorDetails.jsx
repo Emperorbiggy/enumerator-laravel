@@ -1,9 +1,23 @@
 import React, { useState } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 
 export default function EnumeratorDetails({ enumerator, performance }) {
     const [copied, setCopied] = useState('');
+    const [isEditing, setIsEditing] = useState(false);
+    const [editForm, setEditForm] = useState({
+        browsing_network: enumerator.browsing_network || '',
+        browsing_number: enumerator.browsing_number || '',
+    });
+    const [isSaving, setIsSaving] = useState(false);
+
+    const networks = [
+        'MTN',
+        'GLO',
+        'AIRTEL',
+        '9MOBILE',
+        'ETISALAT',
+    ];
 
     const copyToClipboard = (text, field) => {
         navigator.clipboard.writeText(text);
@@ -19,6 +33,49 @@ export default function EnumeratorDetails({ enumerator, performance }) {
             {copied === field ? 'Copied!' : `Copy ${label}`}
         </button>
     );
+
+    const handleEdit = () => {
+        setEditForm({
+            browsing_network: enumerator.browsing_network || '',
+            browsing_number: enumerator.browsing_number || '',
+        });
+        setIsEditing(true);
+    };
+
+    const handleSave = () => {
+        setIsSaving(true);
+        
+        router.put(
+            route('admin.enumerators.update', enumerator.id),
+            editForm,
+            {
+                onSuccess: (page) => {
+                    setIsEditing(false);
+                    setIsSaving(false);
+                    // Show success message
+                    alert('Browsing details updated successfully!');
+                },
+                onError: (errors) => {
+                    setIsSaving(false);
+                    // Show error message
+                    if (errors.browsing_number) {
+                        alert(errors.browsing_number);
+                    } else {
+                        alert('Failed to update browsing details. Please try again.');
+                    }
+                },
+                preserveScroll: true,
+            }
+        );
+    };
+
+    const handleCancel = () => {
+        setIsEditing(false);
+        setEditForm({
+            browsing_network: enumerator.browsing_network || '',
+            browsing_number: enumerator.browsing_number || '',
+        });
+    };
     return (
         <AdminLayout title={`Enumerator Details - ${enumerator.full_name}`}>
             <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -159,9 +216,17 @@ export default function EnumeratorDetails({ enumerator, performance }) {
                     {/* Contact & Network Information */}
                     <div className="mt-6 bg-white shadow overflow-hidden sm:rounded-lg">
                         <div className="px-4 py-5 sm:px-6">
-                            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                                Contact & Network Information
-                            </h3>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                                    Contact & Network Information
+                                </h3>
+                                <button
+                                    onClick={handleEdit}
+                                    className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded-md text-sm font-medium"
+                                >
+                                    Edit Browsing Details
+                                </button>
+                            </div>
                             <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
                                 <div>
                                     <dt className="text-sm font-medium text-gray-500">Browsing Network</dt>
@@ -260,6 +325,66 @@ export default function EnumeratorDetails({ enumerator, performance }) {
                             Print Details
                         </button>
                     </div>
+
+                    {/* Edit Modal */}
+                    {isEditing && (
+                        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                                <div className="mt-3">
+                                    <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+                                        Edit Browsing Details
+                                    </h3>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Browsing Network
+                                            </label>
+                                            <select
+                                                value={editForm.browsing_network}
+                                                onChange={(e) => setEditForm({...editForm, browsing_network: e.target.value})}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                                            >
+                                                <option value="">Select Network</option>
+                                                {networks.map(network => (
+                                                    <option key={network} value={network}>
+                                                        {network}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Browsing Number
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={editForm.browsing_number}
+                                                onChange={(e) => setEditForm({...editForm, browsing_number: e.target.value})}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                                                placeholder="Enter browsing number"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="mt-6 flex justify-end space-x-3">
+                                        <button
+                                            onClick={handleCancel}
+                                            disabled={isSaving}
+                                            className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleSave}
+                                            disabled={isSaving}
+                                            className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                                        >
+                                            {isSaving ? 'Saving...' : 'Save Changes'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
             </div>
         </AdminLayout>
     );

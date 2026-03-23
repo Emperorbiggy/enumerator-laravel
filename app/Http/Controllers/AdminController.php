@@ -993,6 +993,74 @@ class AdminController extends Controller
     }
 
     /**
+     * Update enumerator browsing network and number
+     */
+    public function updateEnumerator(Request $request, Enumerator $enumerator)
+    {
+        try {
+            $validated = $request->validate([
+                'browsing_network' => 'required|string|max:50',
+                'browsing_number' => 'required|string|max:20',
+            ]);
+
+            // Check if the browsing number already exists for another enumerator
+            $existingEnumerator = Enumerator::where('browsing_number', $validated['browsing_number'])
+                ->where('id', '!=', $enumerator->id)
+                ->first();
+
+            if ($existingEnumerator) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This browsing number is already attached to another enumerator: ' . $existingEnumerator->full_name . ' (Code: ' . $existingEnumerator->code . ')'
+                ], 422);
+            }
+
+            // Log the change
+            Log::info('Enumerator browsing details updated', [
+                'enumerator_id' => $enumerator->id,
+                'enumerator_code' => $enumerator->code,
+                'old_network' => $enumerator->browsing_network,
+                'new_network' => $validated['browsing_network'],
+                'old_number' => $enumerator->browsing_number,
+                'new_number' => $validated['browsing_number'],
+            ]);
+
+            // Update the enumerator
+            $enumerator->update([
+                'browsing_network' => $validated['browsing_network'],
+                'browsing_number' => $validated['browsing_number'],
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Browsing details updated successfully',
+                'data' => [
+                    'browsing_network' => $enumerator->browsing_network,
+                    'browsing_number' => $enumerator->browsing_number,
+                ]
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Failed to update enumerator browsing details', [
+                'enumerator_id' => $enumerator->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update browsing details: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Export all enumerators with performance metrics and details
      */
     public function exportEnumerators()
