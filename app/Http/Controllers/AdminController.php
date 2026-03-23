@@ -1100,19 +1100,27 @@ class AdminController extends Controller
                 ], 404);
             }
 
-            // Simulate API call to send data (replace with actual API call)
-            $this->simulateDataSending($browsingNumber, $planCode, $browsingNetwork, $performer);
+            // Use the same API and logging as bulk sending
+            $result = $this->sendDataToIndividual($performer, $planCode, $browsingNetwork);
 
-            return response()->json([
-                'success' => true,
-                'message' => "Data sent successfully to {$performer->full_name} ({$browsingNumber}) using plan {$planCode}",
-                'data' => [
-                    'performer_name' => $performer->full_name,
-                    'browsing_number' => $browsingNumber,
-                    'plan_code' => $planCode,
-                    'network' => $browsingNetwork,
-                ]
-            ]);
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Data sent successfully to {$performer->full_name} ({$browsingNumber}) using plan {$planCode}",
+                    'data' => [
+                        'performer_name' => $performer->full_name,
+                        'browsing_number' => $browsingNumber,
+                        'plan_code' => $planCode,
+                        'network' => $browsingNetwork,
+                        'transaction_id' => $result['transaction_id'] ?? null,
+                    ]
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to send data: ' . $result['message']
+                ], 500);
+            }
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -1135,36 +1143,158 @@ class AdminController extends Controller
     }
 
     /**
-     * Simulate data sending (replace with actual API integration)
+     * Send data to individual performer using the same API as bulk sending
      */
-    private function simulateDataSending($browsingNumber, $planCode, $network, $performer)
+    private function sendDataToIndividual($performer, $planCode, $network)
     {
-        // Log the transaction
-        Log::info('Data transaction simulated', [
-            'browsing_number' => $browsingNumber,
-            'plan_code' => $planCode,
-            'network' => $network,
-            'performer_id' => $performer->id,
-            'performer_name' => $performer->full_name,
-            'timestamp' => now()->toISOString(),
-        ]);
+        try {
+            // Get API configuration (same as bulk sending)
+            $apiUrl = config('services.data_api.url');
+            $apiToken = config('services.data_api.token');
 
-        // Here you would integrate with the actual data API
-        // For example:
-        // $apiResponse = Http::post('https://data-api.example.com/send', [
-        //     'number' => $browsingNumber,
-        //     'plan' => $planCode,
-        //     'network' => $network,
-        // ]);
-        
-        // Save transaction to database if needed
-        // DataSubscription::create([
-        //     'enumerator_id' => $performer->id,
-        //     'browsing_number' => $browsingNumber,
-        //     'plan_code' => $planCode,
-        //     'network' => $network,
-        //     'status' => 'success',
-        // ]);
+            if (!$apiUrl || !$apiToken) {
+                Log::error('API configuration missing for individual data sending', [
+                    'api_url_set' => !empty($apiUrl),
+                    'config_token' => config('services.data_api.token') ? 'SET' : 'NOT_SET'
+                ]);
+                return ['success' => false, 'message' => 'API configuration missing'];
+            }
+
+            $client = new \GuzzleHttp\Client([
+                'timeout' => 30,
+                'headers' => [
+                    'accept' => 'application/json',
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'Content-Type' => 'application/json',
+                ],
+            ]);
+
+            // Normalize phone number (same as bulk sending)
+            $phone = $this->normalizePhoneNumber($performer->browsing_number);
+
+            // Validate API request data
+            $apiRequestData = [
+                'plan_code' => $planCode,
+                'phone' => $phone
+            ];
+
+            Log::info('Making individual API call', [
+                'performer_id' => $performer->id,
+                'phone' => $phone,
+                'original_phone' => $performer->browsing_number,
+                'plan_code' => $planCode,
+                'network' => $network,
+                'api_url' => $apiUrl,
+                'request_data' => $apiRequestData
+            ]);
+
+            // Make API call
+            $response = $client->post($apiUrl, [
+                'json' => $apiRequestData,
+                'timeout' => 30,
+                'connect_timeout' => 10
+            ]);
+
+            $responseBody = $response->getBody()->getContents();
+            $responseData = json_decode($responseBody, true);
+
+            // Validate API response
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new \Exception('Invalid JSON response from API: ' . json_last_error_msg());
+            }
+
+            Log::info('Individual API response received', [
+                'performer_id' => $performer->id,
+                'phone' => $phone,
+                'response_success' => $responseData['success'] ?? false,
+                'response_message' => $responseData['message'] ?? 'No message',
+                'http_status' => $response->getStatusCode()
+            ]);
+
+            // Create subscription record (same as bulk sending)
+            $subscription = new DataSubscription();
+            $subscription->transaction_id = $responseData['data']['transactionId'] ?? uniqid('txn_');
+            $subscription->phone = $phone;
+            $subscription->plan_code = $planCode;
+            $subscription->plan_name = $responseData['data']['planName'] ?? 'Unknown';
+            $subscription->network = $responseData['data']['network'] ?? $network;
+            $subscription->plan_type = $responseData['data']['planType'] ?? 'Unknown';
+            $subscription->amount = $this->cleanAmount($responseData['data']['amount'] ?? 0);
+            $subscription->balance_before = $this->cleanAmount($responseData['data']['balanceBefore'] ?? 0);
+            $subscription->balance_after = $this->cleanAmount($responseData['data']['balanceAfter'] ?? 0);
+            $subscription->response_message = $responseData['data']['response'] ?? 'Success';
+            $subscription->status = $responseData['success'] ? 'success' : 'failed';
+            $subscription->full_response = $responseData;
+            $subscription->enumerator_id = $performer->id;
+            $subscription->registered_users_count = $performer->current_registered_count ?? 0;
+            $subscription->data_source = $performer->data_source ?? 'unknown';
+            $subscription->admin_id = Auth::guard('admin')->id();
+            
+            try {
+                $subscription->save();
+            } catch (\Exception $saveException) {
+                Log::warning('Failed to save individual subscription to database', [
+                    'error' => $saveException->getMessage(),
+                    'transaction_id' => $subscription->transaction_id
+                ]);
+            }
+
+            if ($responseData['success']) {
+                Log::info('Individual data sent successfully', [
+                    'performer_id' => $performer->id,
+                    'phone' => $phone,
+                    'transaction_id' => $subscription->transaction_id
+                ]);
+                return [
+                    'success' => true, 
+                    'message' => 'Data sent successfully',
+                    'transaction_id' => $subscription->transaction_id
+                ];
+            } else {
+                Log::warning('Individual data send failed', [
+                    'performer_id' => $performer->id,
+                    'phone' => $phone,
+                    'response_message' => $responseData['message'] ?? 'Unknown error'
+                ]);
+                return ['success' => false, 'message' => $responseData['message'] ?? 'API returned failure'];
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Individual data sending failed', [
+                'performer_id' => $performer->id,
+                'phone' => $performer->browsing_number,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            // Create failed subscription record
+            try {
+                $failedSubscription = new DataSubscription();
+                $failedSubscription->transaction_id = uniqid('failed_txn_');
+                $failedSubscription->phone = $performer->browsing_number;
+                $failedSubscription->plan_code = $planCode;
+                $failedSubscription->plan_name = 'Unknown';
+                $failedSubscription->network = $network;
+                $failedSubscription->plan_type = 'Unknown';
+                $failedSubscription->amount = 0;
+                $failedSubscription->balance_before = 0;
+                $failedSubscription->balance_after = 0;
+                $failedSubscription->response_message = $e->getMessage();
+                $failedSubscription->status = 'failed';
+                $failedSubscription->full_response = ['error' => $e->getMessage()];
+                $failedSubscription->enumerator_id = $performer->id;
+                $failedSubscription->registered_users_count = $performer->current_registered_count ?? 0;
+                $failedSubscription->data_source = $performer->data_source ?? 'unknown';
+                $failedSubscription->admin_id = Auth::guard('admin')->id();
+                $failedSubscription->save();
+            } catch (\Exception $saveException) {
+                Log::error('Failed to save failed individual subscription', [
+                    'error' => $saveException->getMessage()
+                ]);
+            }
+
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
     }
 
     /**
