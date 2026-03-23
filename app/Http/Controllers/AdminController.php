@@ -1156,7 +1156,7 @@ class AdminController extends Controller
 
         try {
             // Get API configuration (same as bulk sending)
-            $apiUrl = config('services.data_api.url');
+            $apiUrl = config('services.data_api.url') . '/api/data';
             $apiToken = config('services.data_api.token');
 
             Log::info('API Configuration Check', [
