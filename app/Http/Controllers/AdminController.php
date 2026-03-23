@@ -949,6 +949,12 @@ class AdminController extends Controller
         // Get performance data for this enumerator (normalized agent code)
         $normalizedCode = (int)$enumerator->code;
         
+        Log::info('Enumerator Details Debug', [
+            'enumerator_code' => $enumerator->code,
+            'normalized_code' => $normalizedCode,
+            'enumerator_id' => $enumerator->id
+        ]);
+        
         // Get member count from external database
         $memberCount = DB::connection('external_mysql')
             ->table('members')
@@ -956,6 +962,11 @@ class AdminController extends Controller
             ->where(DB::raw('CAST(agentcode AS UNSIGNED)'), $normalizedCode)
             ->groupBy(DB::raw('CAST(agentcode AS UNSIGNED)'))
             ->value('count') ?? 0;
+
+        Log::info('Member Count Result', [
+            'normalized_code' => $normalizedCode,
+            'member_count' => $memberCount
+        ]);
 
         // Get recent members registered by this enumerator
         $recentMembers = DB::connection('external_mysql')
@@ -999,6 +1010,16 @@ class AdminController extends Controller
             foreach ($enumerators as $enumerator) {
                 $normalizedCode = (int)$enumerator->code;
                 $memberCount = $memberCounts->get($normalizedCode, 0);
+                
+                // Log debugging for first few enumerators
+                if (count($exportData) < 5) {
+                    Log::info('Export Debug', [
+                        'enumerator_code' => $enumerator->code,
+                        'normalized_code' => $normalizedCode,
+                        'member_count' => $memberCount,
+                        'available_codes' => $memberCounts->keys()->take(10)->toArray()
+                    ]);
+                }
                 
                 // Calculate days since registration
                 $daysSinceRegistration = (new \DateTime($enumerator->registered_at))->diff(new \DateTime())->days;
