@@ -672,6 +672,11 @@ class AdminController extends Controller
                 'networks' => $networks,
                 'selectedNetwork' => $selectedNetwork,
                 'externalData' => $externalData,
+                'defaultDataPlans' => [
+                    'MTN' => 'ME5',
+                    'GLO' => 'GC12',
+                    'AIRTEL' => 'AA10',
+                ],
                 'stats' => [
                     'total_top_performers' => $topPerformers->count(),
                     'eligible_performers' => $displayPerformers->count(),
@@ -1045,6 +1050,121 @@ class AdminController extends Controller
                 'general' => 'Failed to update browsing details: ' . $e->getMessage()
             ])->withInput();
         }
+    }
+
+    /**
+     * Send data to individual enumerator
+     */
+    public function sendIndividualData(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'performer_id' => 'required|integer',
+                'browsing_number' => 'required|string',
+                'browsing_network' => 'required|string',
+            ]);
+
+            $performerId = $validated['performer_id'];
+            $browsingNumber = $validated['browsing_number'];
+            $browsingNetwork = strtoupper($validated['browsing_network']);
+
+            // Get default plan for the network
+            $defaultPlans = [
+                'MTN' => 'ME5',
+                'GLO' => 'GC12',
+                'AIRTEL' => 'AA10',
+            ];
+
+            $planCode = $defaultPlans[$browsingNetwork] ?? null;
+
+            if (!$planCode) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No default plan configured for network: ' . $browsingNetwork
+                ], 400);
+            }
+
+            Log::info('Sending individual data', [
+                'performer_id' => $performerId,
+                'browsing_number' => $browsingNumber,
+                'browsing_network' => $browsingNetwork,
+                'plan_code' => $planCode,
+            ]);
+
+            // Get performer details
+            $performer = Enumerator::find($performerId);
+            if (!$performer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Performer not found'
+                ], 404);
+            }
+
+            // Simulate API call to send data (replace with actual API call)
+            $this->simulateDataSending($browsingNumber, $planCode, $browsingNetwork, $performer);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Data sent successfully to {$performer->full_name} ({$browsingNumber}) using plan {$planCode}",
+                'data' => [
+                    'performer_name' => $performer->full_name,
+                    'browsing_number' => $browsingNumber,
+                    'plan_code' => $planCode,
+                    'network' => $browsingNetwork,
+                ]
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Failed to send individual data', [
+                'performer_id' => $request->performer_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Simulate data sending (replace with actual API integration)
+     */
+    private function simulateDataSending($browsingNumber, $planCode, $network, $performer)
+    {
+        // Log the transaction
+        Log::info('Data transaction simulated', [
+            'browsing_number' => $browsingNumber,
+            'plan_code' => $planCode,
+            'network' => $network,
+            'performer_id' => $performer->id,
+            'performer_name' => $performer->full_name,
+            'timestamp' => now()->toISOString(),
+        ]);
+
+        // Here you would integrate with the actual data API
+        // For example:
+        // $apiResponse = Http::post('https://data-api.example.com/send', [
+        //     'number' => $browsingNumber,
+        //     'plan' => $planCode,
+        //     'network' => $network,
+        // ]);
+        
+        // Save transaction to database if needed
+        // DataSubscription::create([
+        //     'enumerator_id' => $performer->id,
+        //     'browsing_number' => $browsingNumber,
+        //     'plan_code' => $planCode,
+        //     'network' => $network,
+        //     'status' => 'success',
+        // ]);
     }
 
     /**

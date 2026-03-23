@@ -4,7 +4,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import { useToast } from '@/Components/ToastContainer';
 
 export default function DataSub() {
-    const { topPerformers, filteredPerformers, networks, selectedNetwork, stats, externalData } = usePage().props;
+    const { topPerformers, filteredPerformers, networks, selectedNetwork, stats, externalData, defaultDataPlans } = usePage().props;
     const [selectedNetworkLocal, setSelectedNetworkLocal] = useState(selectedNetwork);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedItems, setSelectedItems] = useState(new Set());
@@ -13,6 +13,7 @@ export default function DataSub() {
     const [selectedDataPlan, setSelectedDataPlan] = useState('');
     const [isSending, setIsSending] = useState(false);
     const [sendingProgress, setSendingProgress] = useState({ current: 0, total: 0 });
+    const [individualSending, setIndividualSending] = useState(new Set());
     const { success, error, info } = useToast();
 
     // Handle network selection
@@ -103,6 +104,60 @@ export default function DataSub() {
         } finally {
             setIsSending(false);
             setSendingProgress({ current: 0, total: 0 });
+        }
+    };
+
+    // Handle individual data sending
+    const handleSendIndividualData = async (performer) => {
+        if (!performer.browsing_number || !performer.browsing_network) {
+            error('Performer missing browsing number or network', 3000);
+            return;
+        }
+
+        // Add to sending set to disable button
+        setIndividualSending(prev => new Set(prev).add(performer.id));
+
+        try {
+            const defaultPlan = defaultDataPlans[performer.browsing_network.toUpperCase()];
+            
+            if (!defaultPlan) {
+                error(`No default plan configured for network: ${performer.browsing_network}`, 3000);
+                return;
+            }
+
+            info(`Sending data to ${performer.full_name} using ${defaultPlan} plan...`, 2000);
+
+            const response = await fetch('/admin/send-individual-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                },
+                body: JSON.stringify({
+                    performer_id: performer.id,
+                    browsing_number: performer.browsing_number,
+                    browsing_network: performer.browsing_network,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                success(data.message, 4000);
+            } else {
+                error('Error sending data: ' + data.message, 4000);
+            }
+
+        } catch (err) {
+            console.error('Send individual data error:', err);
+            error('Error sending data: ' + err.message, 4000);
+        } finally {
+            // Remove from sending set to re-enable button
+            setIndividualSending(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(performer.id);
+                return newSet;
+            });
         }
     };
 
@@ -304,6 +359,35 @@ export default function DataSub() {
                     </div>
                 </div>
 
+                {/* Default Data Plans Info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg mb-6">
+                    <div className="px-4 py-5 sm:p-6">
+                        <h3 className="text-lg leading-6 font-medium text-blue-900 mb-4">
+                            Default Data Plans for Individual Sending
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {Object.entries(defaultDataPlans).map(([network, plan]) => (
+                                <div key={network} className="bg-white rounded-lg p-3 border border-blue-200">
+                                    <div className="flex items-center">
+                                        <div className={`w-3 h-3 rounded-full mr-2 ${
+                                            network === 'MTN' ? 'bg-yellow-500' :
+                                            network === 'GLO' ? 'bg-green-500' :
+                                            network === 'AIRTEL' ? 'bg-red-500' : 'bg-gray-500'
+                                        }`}></div>
+                                        <span className="font-semibold text-gray-900">{network}</span>
+                                    </div>
+                                    <div className="mt-1 text-sm text-gray-600">
+                                        Default Plan: <span className="font-mono font-bold text-blue-600">{plan}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="mt-3 text-sm text-blue-700">
+                            💡 Individual "Send Data" buttons automatically use the default plan for each enumerator's network.
+                        </p>
+                    </div>
+                </div>
+
                 {/* Top Performers List */}
                 <div className="bg-white shadow rounded-lg">
                     <div className="px-4 py-5 sm:p-6">
@@ -423,11 +507,15 @@ export default function DataSub() {
                                                         View Members
                                                     </Link>
                                                     
-                                                    <button className="inline-flex items-center px-3 py-2 border border-green-600 shadow-sm text-sm font-medium rounded-md text-green-600 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500">
+                                                    <button 
+                                                        onClick={() => handleSendIndividualData(performer)}
+                                                        disabled={individualSending.has(performer.id) || !performer.browsing_number || !performer.browsing_network}
+                                                        className="inline-flex items-center px-3 py-2 border border-green-600 shadow-sm text-sm font-medium rounded-md text-green-600 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
                                                         <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                                         </svg>
-                                                        Send Data
+                                                        {individualSending.has(performer.id) ? 'Sending...' : 'Send Data'}
                                                     </button>
                                                 </div>
                                             </div>
