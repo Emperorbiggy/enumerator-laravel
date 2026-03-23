@@ -947,6 +947,7 @@ class AdminController extends Controller
     public function showEnumerator(Enumerator $enumerator)
     {
         // Get performance data for this enumerator (normalized agent code)
+        // Use the same normalization as stats page
         $normalizedCode = (int)$enumerator->code;
         
         Log::info('Enumerator Details Debug', [
@@ -955,17 +956,19 @@ class AdminController extends Controller
             'enumerator_id' => $enumerator->id
         ]);
         
-        // Get member count from external database
-        $memberCount = DB::connection('external_mysql')
+        // Get member count from external database using the same query as stats
+        $memberCounts = DB::connection('external_mysql')
             ->table('members')
             ->select(DB::raw('CAST(agentcode AS UNSIGNED) as normalized_code, COUNT(*) as count'))
-            ->where(DB::raw('CAST(agentcode AS UNSIGNED)'), $normalizedCode)
             ->groupBy(DB::raw('CAST(agentcode AS UNSIGNED)'))
-            ->value('count') ?? 0;
+            ->pluck('count', 'normalized_code');
+        
+        $memberCount = $memberCounts->get($normalizedCode, 0);
 
         Log::info('Member Count Result', [
             'normalized_code' => $normalizedCode,
-            'member_count' => $memberCount
+            'member_count' => $memberCount,
+            'available_codes' => $memberCounts->keys()->take(10)->toArray()
         ]);
 
         // Get recent members registered by this enumerator
