@@ -94,6 +94,10 @@ export default function DataSub() {
                 setSelectedItems(new Set());
                 setSelectAll(false);
                 setSelectedDataPlan('');
+                // Refresh the page to update the data
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
             } else {
                 error('Error sending data: ' + data.message, 5000);
             }
@@ -144,6 +148,10 @@ export default function DataSub() {
 
             if (data.success) {
                 success(data.message, 4000);
+                // Refresh the page to update the data
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
             } else {
                 error('Error sending data: ' + data.message, 4000);
             }

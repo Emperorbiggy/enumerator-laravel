@@ -1273,6 +1273,57 @@ class AdminController extends Controller
                 return ['success' => false, 'message' => $responseData['message'] ?? 'API returned failure'];
             }
 
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            // Handle 4xx errors from API (like 400 Bad Request)
+            $responseBody = $e->hasResponse() ? $e->getResponse()->getBody()->getContents() : '';
+            $responseData = json_decode($responseBody, true);
+            
+            Log::error('Individual data sending failed - Client error', [
+                'performer_id' => $performer->id,
+                'phone' => $performer->browsing_number,
+                'http_status' => $e->hasResponse() ? $e->getResponse()->getStatusCode() : 'No response',
+                'response_body' => $responseBody,
+                'error' => $e->getMessage()
+            ]);
+
+            // Extract the actual error message from API response
+            $errorMessage = 'API request failed';
+            if (json_last_error() === JSON_ERROR_NONE && isset($responseData['message'])) {
+                $errorMessage = $responseData['message'];
+                if (isset($responseData['data']) && is_string($responseData['data'])) {
+                    $errorMessage .= ': ' . $responseData['data'];
+                }
+            } else {
+                $errorMessage = $e->getMessage();
+            }
+
+            // Create failed subscription record
+            try {
+                $failedSubscription = new DataSubscription();
+                $failedSubscription->transaction_id = uniqid('failed_txn_');
+                $failedSubscription->phone = $performer->browsing_number;
+                $failedSubscription->plan_code = $planCode;
+                $failedSubscription->plan_name = 'Unknown';
+                $failedSubscription->network = $network;
+                $failedSubscription->plan_type = 'Unknown';
+                $failedSubscription->amount = 0;
+                $failedSubscription->balance_before = 0;
+                $failedSubscription->balance_after = 0;
+                $failedSubscription->response_message = $errorMessage;
+                $failedSubscription->status = 'failed';
+                $failedSubscription->full_response = $responseData ?? ['error' => $e->getMessage()];
+                $failedSubscription->enumerator_id = $performer->id;
+                $failedSubscription->registered_users_count = $performer->current_registered_count ?? 0;
+                $failedSubscription->data_source = $performer->data_source ?? 'unknown';
+                $failedSubscription->admin_id = Auth::guard('admin')->id();
+                $failedSubscription->save();
+            } catch (\Exception $saveException) {
+                Log::error('Failed to save failed individual subscription', [
+                    'error' => $saveException->getMessage()
+                ]);
+            }
+
+            return ['success' => false, 'message' => $errorMessage];
         } catch (\Exception $e) {
             Log::error('Individual data sending failed', [
                 'performer_id' => $performer->id,
