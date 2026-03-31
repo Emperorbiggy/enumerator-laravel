@@ -2571,6 +2571,19 @@ class AdminController extends Controller
             $from = $filteredCount > 0 ? ($page - 1) * $perPage + 1 : 0;
             $to = min($page * $perPage, $filteredCount);
 
+            // Debug pagination values
+            Log::info('Pagination Debug', [
+                'filtered_count' => $filteredCount,
+                'per_page' => $perPage,
+                'current_page' => $page,
+                'last_page' => $lastPage,
+                'from' => $from,
+                'to' => $to,
+                'has_more' => $page < $lastPage,
+                'has_previous' => $page > 1,
+                'transactions_count' => $transactions->count()
+            ]);
+
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
 
             Log::info('Admin: Data Sub Transactions Request Completed', [

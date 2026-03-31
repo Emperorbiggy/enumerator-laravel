@@ -337,6 +337,10 @@ export default function DataSubTransactions({
                                 Showing {pagination.from} to {pagination.to} of {pagination.total} transactions
                             </div>
                         </div>
+                        {/* Debug info */}
+                        <div className="mt-2 text-xs text-gray-400">
+                            Debug: Page {pagination.current_page} of {pagination.last_page} (Has more: {pagination.has_more ? 'true' : 'false'}, Has previous: {pagination.has_previous ? 'true' : 'false'})
+                        </div>
                     </div>
                 </div>
 
@@ -475,6 +479,7 @@ export default function DataSubTransactions({
                     </div>
 
                     {/* Pagination */}
+                    {/* Debug: pagination.last_page = {pagination.last_page} */}
                     {pagination.last_page > 1 && (
                         <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
                             <div className="flex-1 flex justify-between sm:hidden">
