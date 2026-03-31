@@ -575,6 +575,26 @@ class AdminController extends Controller
                         ->orderBy('created_at', 'asc')
                         ->first();
 
+                    // Check if performer was manually completed today
+                    $manualCompletionToday = DB::table('data_subscriptions')
+                        ->where('enumerator_id', $performer->id)
+                        ->where('data_source', 'manual_completion')
+                        ->whereDate('created_at', today())
+                        ->where('status', 'success')
+                        ->first();
+
+                    if ($manualCompletionToday) {
+                        // Skip performer - already manually completed today
+                        $skippedPerformers[] = [
+                            'performer_id' => $performer->id,
+                            'phone' => $performer->browsing_number,
+                            'reason' => 'manual_completed_today',
+                            'transaction_id' => $manualCompletionToday->transaction_id,
+                            'completed_at' => $manualCompletionToday->created_at
+                        ];
+                        continue;
+                    }
+
                     if ($firstSubscription) {
                         // Calculate target: initial registered count + 100
                         $initialRegisteredCount = $firstSubscription->registered_users_count ?? 0;
