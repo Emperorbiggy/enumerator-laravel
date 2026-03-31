@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 
@@ -16,6 +16,17 @@ export default function DataSubTransactions({
     const [dateFrom, setDateFrom] = useState(filters.date_from || '');
     const [dateTo, setDateTo] = useState(filters.date_to || '');
     const [retryingTransaction, setRetryingTransaction] = useState(null);
+
+    // Debounced search effect
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (search !== filters.search) {
+                applyFilters();
+            }
+        }, 500); // 500ms debounce
+
+        return () => clearTimeout(timer);
+    }, [search]);
 
     const applyFilters = () => {
         router.get(route('admin.data-sub-transactions'), {
@@ -232,7 +243,11 @@ export default function DataSubTransactions({
                             <div>
                                 <select
                                     value={selectedStatus}
-                                    onChange={(e) => setSelectedStatus(e.target.value)}
+                                    onChange={(e) => {
+                                        setSelectedStatus(e.target.value);
+                                        // Auto-apply filter when status changes
+                                        setTimeout(() => applyFilters(), 100);
+                                    }}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
                                 >
                                     <option value="">All Status</option>
@@ -244,7 +259,11 @@ export default function DataSubTransactions({
                             <div>
                                 <select
                                     value={selectedNetwork}
-                                    onChange={(e) => setSelectedNetwork(e.target.value)}
+                                    onChange={(e) => {
+                                        setSelectedNetwork(e.target.value);
+                                        // Auto-apply filter when network changes
+                                        setTimeout(() => applyFilters(), 100);
+                                    }}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
                                 >
                                     <option value="">All Networks</option>
@@ -259,7 +278,11 @@ export default function DataSubTransactions({
                                 <input
                                     type="date"
                                     value={dateFrom}
-                                    onChange={(e) => setDateFrom(e.target.value)}
+                                    onChange={(e) => {
+                                        setDateFrom(e.target.value);
+                                        // Auto-apply filter when date changes
+                                        setTimeout(() => applyFilters(), 100);
+                                    }}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
                                     placeholder="From date"
                                 />
@@ -268,7 +291,11 @@ export default function DataSubTransactions({
                                 <input
                                     type="date"
                                     value={dateTo}
-                                    onChange={(e) => setDateTo(e.target.value)}
+                                    onChange={(e) => {
+                                        setDateTo(e.target.value);
+                                        // Auto-apply filter when date changes
+                                        setTimeout(() => applyFilters(), 100);
+                                    }}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
                                     placeholder="To date"
                                 />

@@ -2407,63 +2407,13 @@ class AdminController extends Controller
      */
     private function checkApiHealth($apiUrl, $planCode, $network, $client)
     {
-        try {
-            Log::info('Checking API health', [
-                'api_url' => $apiUrl,
-                'plan_code' => $planCode,
-                'network' => $network
-            ]);
-
-            // Make a test API call with a test phone number
-            $testResponse = $client->post($apiUrl, [
-                'json' => [
-                    'plan_code' => $planCode,
-                    'phone' => '08000000000' // Test phone number
-                ],
-                'timeout' => 15
-            ]);
-
-            $testResponseBody = $testResponse->getBody()->getContents();
-            $testResponseData = json_decode($testResponseBody, true);
-
-            Log::info('API health check completed', [
-                'status_code' => $testResponse->getStatusCode(),
-                'success' => $testResponseData['success'] ?? false,
-                'message' => $testResponseData['message'] ?? 'No message'
-            ]);
-
-            // If API returns SIM or balance issues, log warning
-            if (!$testResponseData['success']) {
-                if (strpos($testResponseBody, 'active sim') !== false) {
-                    Log::warning('API health check failed - SIM issue detected', [
-                        'network' => $network,
-                        'plan_code' => $planCode,
-                        'error_message' => $testResponseData['message'] ?? 'Unknown error'
-                    ]);
-                } elseif (strpos($testResponseBody, 'balance') !== false) {
-                    Log::warning('API health check failed - Balance issue detected', [
-                        'network' => $network,
-                        'plan_code' => $planCode,
-                        'error_message' => $testResponseData['message'] ?? 'Unknown error'
-                    ]);
-                } elseif (strpos($testResponseBody, 'Transaction limit') !== false || strpos($testResponseBody, 'limit would be exceeded') !== false) {
-                    Log::error('API health check failed - Transaction limit exceeded', [
-                        'network' => $network,
-                        'plan_code' => $planCode,
-                        'error_message' => $testResponseData['message'] ?? 'Transaction limit exceeded',
-                        'critical' => true
-                    ]);
-                }
-            }
-
-        } catch (\Exception $e) {
-            Log::error('API health check failed', [
-                'api_url' => $apiUrl,
-                'plan_code' => $planCode,
-                'network' => $network,
-                'error' => $e->getMessage()
-            ]);
-        }
+        // Log API configuration without making test calls to avoid unwanted data purchases
+        Log::info('API health check - Configuration verified', [
+            'api_url' => $apiUrl,
+            'plan_code' => $planCode,
+            'network' => $network,
+            'note' => 'Health check call disabled to prevent unwanted data purchases'
+        ]);
     }
 
     /**
@@ -2524,6 +2474,13 @@ class AdminController extends Controller
                 ->leftJoin('enumerators', 'data_subscriptions.enumerator_id', '=', 'enumerators.id')
                 ->leftJoin('admins', 'data_subscriptions.admin_id', '=', 'admins.id');
 
+            // Get total counts from entire dataset (before filters)
+            $totalQuery = DB::table('data_subscriptions');
+            $totalCount = $totalQuery->count();
+            $successCount = (clone $totalQuery)->where('status', 'success')->count();
+            $failedCount = (clone $totalQuery)->where('status', 'failed')->count();
+            $pendingCount = (clone $totalQuery)->where('status', 'pending')->count();
+
             // Apply filters
             if (!empty($search)) {
                 $query->where(function($q) use ($search) {
@@ -2551,11 +2508,8 @@ class AdminController extends Controller
                 $query->whereDate('data_subscriptions.created_at', '<=', $dateTo);
             }
 
-            // Get total counts
-            $totalCount = $query->count();
-            $successCount = (clone $query)->where('data_subscriptions.status', 'success')->count();
-            $failedCount = (clone $query)->where('data_subscriptions.status', 'failed')->count();
-            $pendingCount = (clone $query)->where('data_subscriptions.status', 'pending')->count();
+            // Get filtered count for pagination
+            $filteredCount = $query->count();
 
             // Get unique networks for filter
             $networks = DB::table('data_subscriptions')
@@ -2593,9 +2547,9 @@ class AdminController extends Controller
                 });
 
             // Calculate pagination info
-            $lastPage = ceil($totalCount / $perPage);
-            $from = ($page - 1) * $perPage + 1;
-            $to = min($page * $perPage, $totalCount);
+            $lastPage = ceil($filteredCount / $perPage);
+            $from = $filteredCount > 0 ? ($page - 1) * $perPage + 1 : 0;
+            $to = min($page * $perPage, $filteredCount);
 
             $responseTime = round((microtime(true) - $startTime) * 1000, 2);
 
@@ -2603,8 +2557,15 @@ class AdminController extends Controller
                 'page' => $page,
                 'per_page' => $perPage,
                 'total_count' => $totalCount,
-                'filtered_count' => $transactions->count(),
+                'filtered_count' => $filteredCount,
                 'response_time_ms' => $responseTime,
+                'filters' => [
+                    'search' => $search,
+                    'status' => $status,
+                    'network' => $network,
+                    'date_from' => $dateFrom,
+                    'date_to' => $dateTo,
+                ],
                 'timestamp' => now()->toISOString()
             ]);
 
@@ -2616,7 +2577,7 @@ class AdminController extends Controller
                     'per_page' => $perPage,
                     'from' => $from,
                     'to' => $to,
-                    'total' => $totalCount,
+                    'total' => $filteredCount,
                     'has_more' => $page < $lastPage,
                     'has_previous' => $page > 1,
                 ],
