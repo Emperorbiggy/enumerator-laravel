@@ -61,14 +61,19 @@ export default function DataSub() {
 
     // Handle mark completed
     const handleMarkCompleted = async () => {
-        if (!window.confirm('Are you sure you want to mark all filtered performers as completed? This will create successful transactions for all of them with their default data plans.')) {
+        if (selectedItems.size === 0) {
+            error('Please select at least one performer to mark as completed');
+            return;
+        }
+
+        if (!window.confirm(`Are you sure you want to mark ${selectedItems.size} selected performer(s) as completed? This will create successful transactions for them with their default data plans.`)) {
             return;
         }
 
         setMarkingCompleted(true);
 
         try {
-            info('Marking all filtered performers as completed...', 3000);
+            info(`Marking ${selectedItems.size} selected performers as completed...`, 3000);
 
             const response = await fetch('/admin/mark-all-completed', {
                 method: 'POST',
@@ -77,7 +82,7 @@ export default function DataSub() {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                 },
                 body: JSON.stringify({
-                    performer_ids: filteredPerformersList.map(p => p.id),
+                    performer_ids: Array.from(selectedItems),
                 }),
             });
 
@@ -85,6 +90,8 @@ export default function DataSub() {
 
             if (data.success) {
                 success(`Successfully marked ${data.marked_count} performers as completed!`, 5000);
+                setSelectedItems(new Set());
+                setSelectAll(false);
                 // Refresh the page to update the data
                 setTimeout(() => {
                     window.location.reload();
@@ -408,7 +415,7 @@ export default function DataSub() {
                                 <div className="mt-2">
                                     <button
                                         onClick={handleMarkCompleted}
-                                        disabled={markingCompleted || filteredPerformersList.length === 0}
+                                        disabled={markingCompleted || selectedItems.size === 0}
                                         className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-md text-sm font-medium disabled:cursor-not-allowed flex items-center justify-center"
                                     >
                                         {markingCompleted ? (
@@ -424,7 +431,7 @@ export default function DataSub() {
                                                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
-                                                Mark All Filtered as Completed ({filteredPerformersList.length})
+                                                Mark Selected as Completed ({selectedItems.size})
                                             </>
                                         )}
                                     </button>

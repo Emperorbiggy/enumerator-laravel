@@ -2817,4 +2817,96 @@ class AdminController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Revert manually completed transactions from today
+     */
+    public function revertTodayManualCompletions(Request $request)
+    {
+        $startTime = microtime(true);
+        
+        try {
+            Log::info('Admin: Revert Today Manual Completions Started', [
+                'admin_id' => Auth::guard('admin')->id(),
+                'timestamp' => now()->toISOString()
+            ]);
+
+            // Find all manual completions from today
+            $todayTransactions = DB::table('data_subscriptions')
+                ->where('data_source', 'manual_completion')
+                ->whereDate('created_at', today())
+                ->where('status', 'success')
+                ->get();
+
+            if ($todayTransactions->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No manual completion transactions found for today'
+                ], 404);
+            }
+
+            $deletedCount = 0;
+            $transactionIds = [];
+
+            foreach ($todayTransactions as $transaction) {
+                try {
+                    // Delete the transaction
+                    DB::table('data_subscriptions')
+                        ->where('id', $transaction->id)
+                        ->delete();
+                    
+                    $deletedCount++;
+                    $transactionIds[] = $transaction->transaction_id;
+
+                    Log::info('Manual completion transaction reverted', [
+                        'transaction_id' => $transaction->transaction_id,
+                        'enumerator_id' => $transaction->enumerator_id,
+                        'phone' => $transaction->phone,
+                        'plan_code' => $transaction->plan_code
+                    ]);
+
+                } catch (\Exception $e) {
+                    Log::error('Error reverting transaction', [
+                        'transaction_id' => $transaction->transaction_id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+
+            Log::info('Admin: Revert Today Manual Completions Successful', [
+                'total_found' => $todayTransactions->count(),
+                'deleted_count' => $deletedCount,
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully reverted {$deletedCount} manual completion transactions from today.",
+                'deleted_count' => $deletedCount,
+                'transaction_ids' => $transactionIds,
+                'response_time_ms' => $responseTime
+            ]);
+
+        } catch (\Exception $e) {
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::error('Admin: Revert Today Manual Completions Failed', [
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to revert manual completions: ' . $e->getMessage(),
+                'response_time_ms' => $responseTime
+            ], 500);
+        }
+    }
 }

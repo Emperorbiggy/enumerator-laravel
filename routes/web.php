@@ -40,6 +40,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::post('/send-batch-data', [AdminController::class, 'sendBatchData'])->name('send.batch.data');
     Route::post('/send-individual-data', [AdminController::class, 'sendIndividualData'])->name('send.individual.data');
     Route::post('/mark-all-completed', [AdminController::class, 'markAllCompleted'])->name('mark.all.completed');
+    Route::post('/revert-today-manual-completions', [AdminController::class, 'revertTodayManualCompletions'])->name('revert.today.manual.completions');
     Route::post('/retry-transaction', [AdminController::class, 'retryTransaction'])->name('retry.transaction');
     Route::get('/failed-transactions', [AdminController::class, 'getFailedTransactions'])->name('failed.transactions');
     Route::get('/data-plan-management', [AdminController::class, 'dataPlanManagement'])->name('data.plan.management');
