@@ -2634,4 +2634,187 @@ class AdminController extends Controller
             ]);
         }
     }
+
+    /**
+     * Mark all filtered performers as completed with successful transactions
+     */
+    public function markAllCompleted(Request $request)
+    {
+        $startTime = microtime(true);
+        
+        try {
+            $validated = $request->validate([
+                'performer_ids' => 'required|array',
+                'performer_ids.*' => 'integer|exists:enumerators,id',
+            ]);
+
+            $performerIds = $validated['performer_ids'];
+            
+            Log::info('Admin: Mark All Completed Started', [
+                'performer_count' => count($performerIds),
+                'admin_id' => Auth::guard('admin')->id(),
+                'timestamp' => now()->toISOString()
+            ]);
+
+            // Get performers
+            $performers = Enumerator::whereIn('id', $performerIds)->get();
+            
+            if ($performers->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No valid performers found'
+                ], 400);
+            }
+
+            // Default data plans
+            $defaultDataPlans = [
+                'MTN' => 'ME5',
+                'GLO' => 'GC12',
+                'AIRTEL' => 'AA10',
+            ];
+
+            $markedCount = 0;
+            $skippedCount = 0;
+
+            foreach ($performers as $performer) {
+                try {
+                    // Check if performer has browsing number and network
+                    if (!$performer->browsing_number || !$performer->browsing_network) {
+                        Log::warning('Performer skipped - missing browsing number or network', [
+                            'performer_id' => $performer->id,
+                            'phone' => $performer->browsing_number,
+                            'network' => $performer->browsing_network
+                        ]);
+                        $skippedCount++;
+                        continue;
+                    }
+
+                    // Get default plan for network
+                    $network = strtoupper($performer->browsing_network);
+                    $planCode = $defaultDataPlans[$network] ?? null;
+                    
+                    if (!$planCode) {
+                        Log::warning('Performer skipped - no default plan for network', [
+                            'performer_id' => $performer->id,
+                            'network' => $network
+                        ]);
+                        $skippedCount++;
+                        continue;
+                    }
+
+                    // Normalize phone number
+                    $phone = $this->normalizePhoneNumber($performer->browsing_number);
+                    
+                    if (empty($phone) || strlen($phone) !== 11) {
+                        Log::warning('Performer skipped - invalid phone number', [
+                            'performer_id' => $performer->id,
+                            'original_phone' => $performer->browsing_number,
+                            'normalized_phone' => $phone
+                        ]);
+                        $skippedCount++;
+                        continue;
+                    }
+
+                    // Get current registered count
+                    try {
+                        $currentRegisteredCount = DB::connection('external_mysql')
+                            ->table('members')
+                            ->where('agentcode', $performer->code)
+                            ->count();
+                    } catch (\Exception $memberException) {
+                        Log::error('External database not reachable for performer', [
+                            'performer_id' => $performer->id,
+                            'error' => $memberException->getMessage()
+                        ]);
+                        $skippedCount++;
+                        continue;
+                    }
+
+                    // Create successful transaction
+                    $subscription = new DataSubscription();
+                    $subscription->transaction_id = 'MANUAL_' . uniqid() . '_' . time();
+                    $subscription->phone = $phone;
+                    $subscription->plan_code = $planCode;
+                    $subscription->plan_name = $planCode . ' Plan (Manual)';
+                    $subscription->network = $performer->browsing_network;
+                    $subscription->plan_type = 'Data';
+                    $subscription->amount = 0; // Manual completion, no charge
+                    $subscription->balance_before = 0;
+                    $subscription->balance_after = 0;
+                    $subscription->response_message = 'Manually marked as completed';
+                    $subscription->status = 'success';
+                    $subscription->full_response = [
+                        'success' => true,
+                        'message' => 'Manually marked as completed',
+                        'data' => [
+                            'transactionId' => $subscription->transaction_id,
+                            'planName' => $subscription->plan_name,
+                            'network' => $subscription->network,
+                            'planType' => $subscription->plan_type,
+                            'amount' => $subscription->amount,
+                            'response' => $subscription->response_message
+                        ]
+                    ];
+                    $subscription->enumerator_id = $performer->id;
+                    $subscription->registered_users_count = $currentRegisteredCount;
+                    $subscription->data_source = 'manual_completion';
+                    $subscription->admin_id = Auth::guard('admin')->id();
+                    
+                    $subscription->save();
+                    $markedCount++;
+
+                    Log::info('Performer marked as completed', [
+                        'performer_id' => $performer->id,
+                        'phone' => $phone,
+                        'plan_code' => $planCode,
+                        'network' => $performer->browsing_network,
+                        'transaction_id' => $subscription->transaction_id
+                    ]);
+
+                } catch (\Exception $e) {
+                    Log::error('Error marking performer as completed', [
+                        'performer_id' => $performer->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    $skippedCount++;
+                }
+            }
+
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+
+            Log::info('Admin: Mark All Completed Successful', [
+                'total_requested' => $performers->count(),
+                'marked_count' => $markedCount,
+                'skipped_count' => $skippedCount,
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully marked {$markedCount} performers as completed. {$skippedCount} performers were skipped.",
+                'marked_count' => $markedCount,
+                'skipped_count' => $skippedCount,
+                'response_time_ms' => $responseTime
+            ]);
+
+        } catch (\Exception $e) {
+            $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::error('Admin: Mark All Completed Failed', [
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'response_time_ms' => $responseTime,
+                'timestamp' => now()->toISOString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to mark performers as completed: ' . $e->getMessage(),
+                'response_time_ms' => $responseTime
+            ], 500);
+        }
+    }
 }
