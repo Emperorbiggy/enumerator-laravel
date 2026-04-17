@@ -54,4 +54,10 @@ return [
         'token' => env('DATA_API'),
     ],
 
+    'prembly' => [
+        'base_url' => env('PREMBLY_BASE_URL', 'https://api.prembly.com'),
+        'api_key' => env('PREMBLY_API_KEY'),
+        'env' => env('PREMBLY_ENV', 'test'),
+    ],
+
 ];

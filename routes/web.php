@@ -5,6 +5,7 @@ use App\Http\Controllers\EnumeratorController;
 use App\Http\Controllers\PaystackController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ExternalMembersController;
+use App\Http\Controllers\MembersController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -68,6 +69,11 @@ Route::prefix('api/external-members')->group(function () {
     Route::get('/test-connection', [ExternalMembersController::class, 'testConnection']);
     Route::get('/{id}', [ExternalMembersController::class, 'show']);
 });
+
+// Members routes
+Route::get('/upload', [MembersController::class, 'showUploadForm'])->name('upload.form');
+Route::post('/members/upload', [MembersController::class, 'uploadAndVerify'])->name('members.upload');
+Route::get('/members', [MembersController::class, 'index'])->name('members.index');
 
 // Profile routes without authentication
 Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

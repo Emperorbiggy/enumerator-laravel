@@ -396,20 +396,16 @@ export default function DataSub() {
                                     </button>
                                     <button
                                         onClick={handleSendData}
-                                        disabled={selectedItems.size === 0 || !selectedDataPlan || isSending}
-                                        className="flex-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-md text-sm font-medium disabled:cursor-not-allowed"
+                                        disabled={true} // Temporarily disabled
+                                        className="flex-1 bg-gray-400 hover:bg-gray-400 text-white px-3 py-2 rounded-md text-sm font-medium disabled:cursor-not-allowed opacity-60"
+                                        title="Bulk data sending is temporarily disabled"
                                     >
-                                        {isSending ? (
-                                            <div className="flex items-center justify-center">
-                                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                </svg>
-                                                Processing... {sendingProgress.current > 0 && `${sendingProgress.current}/${sendingProgress.total}`}
-                                            </div>
-                                        ) : (
-                                            `Send Data (${selectedItems.size})`
-                                        )}
+                                        <div className="flex items-center justify-center">
+                                            <svg className="mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                            </svg>
+                                            Send Data (Disabled)
+                                        </div>
                                     </button>
                                 </div>
                                 <div className="mt-2">
@@ -591,13 +587,14 @@ export default function DataSub() {
                                                     
                                                     <button 
                                                         onClick={() => handleSendIndividualData(performer)}
-                                                        disabled={individualSending.has(performer.id) || !performer.browsing_number || !performer.browsing_network}
-                                                        className="inline-flex items-center px-3 py-2 border border-green-600 shadow-sm text-sm font-medium rounded-md text-green-600 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        disabled={true} // Temporarily disabled
+                                                        className="inline-flex items-center px-3 py-2 border border-gray-400 shadow-sm text-sm font-medium rounded-md text-gray-400 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed opacity-60"
+                                                        title="Individual data sending is temporarily disabled"
                                                     >
                                                         <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
                                                         </svg>
-                                                        {individualSending.has(performer.id) ? 'Sending...' : 'Send Data'}
+                                                        Send Data (Disabled)
                                                     </button>
                                                 </div>
                                             </div>

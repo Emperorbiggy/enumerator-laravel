@@ -29,7 +29,7 @@ export default function DataSubTransactions({
     }, [search]);
 
     const applyFilters = () => {
-        router.get(route('admin.data-sub-transactions'), {
+        router.get(route('data.sub.transactions'), {
             search,
             status: selectedStatus,
             network: selectedNetwork,
@@ -45,7 +45,7 @@ export default function DataSubTransactions({
         setSelectedNetwork('');
         setDateFrom('');
         setDateTo('');
-        router.get(route('admin.data-sub-transactions'), {}, { preserveState: true });
+        router.get(route('data.sub.transactions'), {}, { preserveState: true });
     };
 
     const handleSearch = (e) => {
@@ -54,7 +54,7 @@ export default function DataSubTransactions({
     };
 
     const handlePageChange = (page) => {
-        router.get(route('admin.data-sub-transactions'), {
+        router.get(route('data.sub.transactions'), {
             search,
             status: selectedStatus,
             network: selectedNetwork,
