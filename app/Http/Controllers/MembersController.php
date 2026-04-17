@@ -168,70 +168,99 @@ class MembersController extends Controller
 
     /**
      * Pre-filter NINs based on environment
-     * - Test: Use hardcoded test NINs
-     * - Live: Check external database for existing NINs
+     * - Test: Use hardcoded test NINs + check local database
+     * - Live: Check both external and local databases for existing NINs
      */
     private function preFilterNINs(array $nins, string $environment): array
     {
+        $existingNins = [];
+        $externalExistingNins = [];
+        $localExistingNins = [];
+        
         if ($environment === 'test') {
-            // In test mode, return all NINs (hardcoded filtering done in batchVerifyNINs)
-            return $nins;
-        }
-
-        // Live mode: Check external database
-        try {
-            Log::info('Attempting to connect to external database for NIN pre-filtering');
-            $externalConnection = $this->getExternalDatabaseConnection();
-            
-            if (!$externalConnection) {
-                Log::error('FAILED: Could not connect to external database - all NINs will be processed');
-                return $nins; // Return all NINs if connection fails
-            }
-
-            Log::info('SUCCESS: Connected to external database, checking for existing NINs');
-            
-            $existingNins = [];
-            $checkedCount = 0;
+            // Test mode: Check local database + hardcoded test NINs
+            Log::info('TEST MODE: Checking local database for existing NINs');
             
             foreach ($nins as $nin) {
-                try {
-                    $checkedCount++;
-                    $result = $externalConnection->select("SELECT nin FROM members WHERE nin = ? LIMIT 1", [$nin]);
-                    if (!empty($result)) {
-                        $existingNins[] = $nin;
-                        Log::info("Found existing NIN in external database: $nin");
-                    }
-                } catch (\Exception $e) {
-                    Log::error("Error checking NIN $nin in external database: " . $e->getMessage());
+                if (Member::where('nin', $nin)->exists()) {
+                    $localExistingNins[] = $nin;
+                    Log::info("Found existing NIN in local database: $nin");
                 }
             }
-
-            $externalConnection->disconnect();
             
-            $filteredNins = array_diff($nins, $existingNins);
-            $existingCount = count($existingNins);
-            $filteredCount = count($filteredNins);
+            // Add hardcoded test NINs
+            $hardcodedTestNins = ['84726139034', '19374362859', '56281933746'];
+            $hardcodedFound = array_intersect($nins, $hardcodedTestNins);
             
-            // Log detailed results
-            Log::info('EXTERNAL DATABASE CHECK RESULTS:', [
-                'environment' => $environment,
-                'connection_status' => 'SUCCESS',
-                'total_nins_checked' => $checkedCount,
-                'existing_in_external_db' => $existingCount,
-                'new_nins_to_process' => $filteredCount,
-                'existing_nins_list' => $existingNins,
-                'filtered_nins_list' => $filteredNins,
-                'skip_reason' => $existingCount > 0 ? "Found $existingCount NINs that already exist in external database" : "No existing NINs found - all will be processed"
+            $existingNins = array_merge($localExistingNins, $hardcodedFound);
+            $existingNins = array_unique($existingNins);
+            
+            Log::info('TEST MODE PRE-FILTER RESULTS:', [
+                'total_nins' => count($nins),
+                'existing_in_local_db' => count($localExistingNins),
+                'hardcoded_test_nins' => count($hardcodedFound),
+                'total_existing' => count($existingNins),
+                'new_nins_to_process' => count($nins) - count($existingNins),
+                'cost_saved' => count($existingNins) . ' API calls avoided'
             ]);
-
-            // Return NINs that don't exist in external database
-            return $filteredNins;
-
-        } catch (\Exception $e) {
-            Log::error('CRITICAL ERROR in preFilterNINs: ' . $e->getMessage());
-            Log::error('Falling back to processing all NINs due to external database error');
-            return $nins; // Return all NINs if there's an error
+            
+        } else {
+            // Live mode: Check both external and local databases
+            Log::info('LIVE MODE: Checking both external and local databases for existing NINs');
+            
+            // Check external database
+            try {
+                Log::info('Step 1: Checking external database');
+                $externalConnection = $this->getExternalDatabaseConnection();
+                
+                if ($externalConnection) {
+                    foreach ($nins as $nin) {
+                        try {
+                            $result = $externalConnection->select("SELECT nin FROM members WHERE nin = ? LIMIT 1", [$nin]);
+                            if (!empty($result)) {
+                                $externalExistingNins[] = $nin;
+                                Log::info("Found existing NIN in external database: $nin");
+                            }
+                        } catch (\Exception $e) {
+                            Log::error("Error checking NIN $nin in external database: " . $e->getMessage());
+                        }
+                    }
+                    $externalConnection->disconnect();
+                    Log::info('External database check completed');
+                } else {
+                    Log::warning('Could not connect to external database - skipping external check');
+                }
+            } catch (\Exception $e) {
+                Log::error('Error in external database check: ' . $e->getMessage());
+            }
+            
+            // Check local database
+            Log::info('Step 2: Checking local database');
+            foreach ($nins as $nin) {
+                if (Member::where('nin', $nin)->exists()) {
+                    $localExistingNins[] = $nin;
+                    Log::info("Found existing NIN in local database: $nin");
+                }
+            }
+            
+            // Merge existing NINs from both databases
+            $existingNins = array_unique(array_merge($externalExistingNins, $localExistingNins));
+            
+            Log::info('LIVE MODE PRE-FILTER RESULTS:', [
+                'total_nins' => count($nins),
+                'existing_in_external_db' => count($externalExistingNins),
+                'existing_in_local_db' => count($localExistingNins),
+                'total_unique_existing' => count($existingNins),
+                'new_nins_to_process' => count($nins) - count($existingNins),
+                'cost_saved' => count($existingNins) . ' API calls avoided',
+                'external_existing_list' => $externalExistingNins,
+                'local_existing_list' => $localExistingNins,
+                'duplicates_found' => count(array_intersect($externalExistingNins, $localExistingNins))
+            ]);
         }
+        
+        // Return NINs that don't exist in either database
+        return array_diff($nins, $existingNins);
     }
 
     /**
@@ -303,24 +332,15 @@ class MembersController extends Controller
         // Pre-filter NINs based on environment
         $filteredNins = $this->preFilterNINs($nins, $environment);
         
-        if ($environment === 'test') {
-            // Hardcoded test NINs that already exist (for testing)
-            $hardcodedTestNins = ['84726139034', '19374362859', '56281933746'];
-            $filteredNins = array_diff($filteredNins, $hardcodedTestNins);
-            $results['already_exists'] += count(array_intersect($nins, $hardcodedTestNins));
-        }
+        // Calculate how many NINs were filtered out (already exist)
+        $filteredOutCount = count($nins) - count($filteredNins);
+        $results['already_exists'] += $filteredOutCount;
 
         foreach ($filteredNins as $nin) {
             try {
-                // Verify NIN
+                // Verify NIN (only NINs that don't exist in either database reach here)
                 $verificationData = $this->ninService->verifyNIN($nin);
                 $memberData = $this->ninService->extractMemberData($verificationData, $nin);
-                
-                // Check if member already exists in local database (only after verification)
-                if ($memberData['nin'] && Member::where('nin', $memberData['nin'])->exists()) {
-                    $results['already_exists']++;
-                    continue;
-                }
 
                 if ($memberData['nin']) {
                     // Create member record
