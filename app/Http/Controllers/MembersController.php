@@ -180,19 +180,26 @@ class MembersController extends Controller
 
         // Live mode: Check external database
         try {
+            Log::info('Attempting to connect to external database for NIN pre-filtering');
             $externalConnection = $this->getExternalDatabaseConnection();
             
             if (!$externalConnection) {
-                Log::error('Could not connect to external database');
+                Log::error('FAILED: Could not connect to external database - all NINs will be processed');
                 return $nins; // Return all NINs if connection fails
             }
 
+            Log::info('SUCCESS: Connected to external database, checking for existing NINs');
+            
             $existingNins = [];
+            $checkedCount = 0;
+            
             foreach ($nins as $nin) {
                 try {
+                    $checkedCount++;
                     $result = $externalConnection->select("SELECT nin FROM members WHERE nin = ? LIMIT 1", [$nin]);
                     if (!empty($result)) {
                         $existingNins[] = $nin;
+                        Log::info("Found existing NIN in external database: $nin");
                     }
                 } catch (\Exception $e) {
                     Log::error("Error checking NIN $nin in external database: " . $e->getMessage());
@@ -201,18 +208,28 @@ class MembersController extends Controller
 
             $externalConnection->disconnect();
             
-            // Log filtered NINs
-            Log::info('External database check:', [
-                'total_nins' => count($nins),
-                'existing_in_external' => count($existingNins),
-                'filtered_nins' => array_diff($nins, $existingNins)
+            $filteredNins = array_diff($nins, $existingNins);
+            $existingCount = count($existingNins);
+            $filteredCount = count($filteredNins);
+            
+            // Log detailed results
+            Log::info('EXTERNAL DATABASE CHECK RESULTS:', [
+                'environment' => $environment,
+                'connection_status' => 'SUCCESS',
+                'total_nins_checked' => $checkedCount,
+                'existing_in_external_db' => $existingCount,
+                'new_nins_to_process' => $filteredCount,
+                'existing_nins_list' => $existingNins,
+                'filtered_nins_list' => $filteredNins,
+                'skip_reason' => $existingCount > 0 ? "Found $existingCount NINs that already exist in external database" : "No existing NINs found - all will be processed"
             ]);
 
             // Return NINs that don't exist in external database
-            return array_diff($nins, $existingNins);
+            return $filteredNins;
 
         } catch (\Exception $e) {
-            Log::error('Error in preFilterNINs: ' . $e->getMessage());
+            Log::error('CRITICAL ERROR in preFilterNINs: ' . $e->getMessage());
+            Log::error('Falling back to processing all NINs due to external database error');
             return $nins; // Return all NINs if there's an error
         }
     }
@@ -234,14 +251,35 @@ class MembersController extends Controller
                 'prefix' => '',
             ];
 
+            Log::info('EXTERNAL DATABASE CONFIG:', [
+                'host' => $config['host'],
+                'port' => $config['port'],
+                'database' => $config['database'],
+                'username' => $config['username'],
+                'password_set' => !empty($config['password']) ? 'YES' : 'NO'
+            ]);
+
             $capsule = new \Illuminate\Database\Capsule\Manager;
             $capsule->addConnection($config, 'external');
             $capsule->setAsGlobal();
             $capsule->bootEloquent();
 
-            return $capsule->getConnection('external');
+            $connection = $capsule->getConnection('external');
+            
+            // Test the connection
+            $connection->select('SELECT 1');
+            
+            Log::info('EXTERNAL DATABASE CONNECTION: SUCCESS - Connection established and tested');
+            
+            return $connection;
         } catch (\Exception $e) {
-            Log::error('External database connection error: ' . $e->getMessage());
+            Log::error('EXTERNAL DATABASE CONNECTION: FAILED - ' . $e->getMessage());
+            Log::error('Connection error details:', [
+                'error_code' => $e->getCode(),
+                'error_message' => $e->getMessage(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine()
+            ]);
             return null;
         }
     }
