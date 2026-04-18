@@ -6,6 +6,7 @@ use App\Http\Controllers\PaystackController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ExternalMembersController;
 use App\Http\Controllers\MembersController;
+use App\Http\Controllers\WardController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -74,6 +75,9 @@ Route::prefix('api/external-members')->group(function () {
 Route::get('/upload', [MembersController::class, 'showUploadForm'])->name('upload.form');
 Route::post('/members/upload', [MembersController::class, 'uploadAndVerify'])->name('members.upload');
 Route::get('/members', [MembersController::class, 'index'])->name('members.index');
+
+// API routes for dynamic dropdowns
+Route::get('/api/lgas/{lga}/wards', [WardController::class, 'getWardsByLga'])->name('api.lgas.wards');
 
 // Profile routes without authentication
 Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

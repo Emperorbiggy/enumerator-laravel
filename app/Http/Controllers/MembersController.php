@@ -42,12 +42,27 @@ class MembersController extends Controller
     {
         set_time_limit(300); // Increase to 5 minutes for batch processing
         $request->validate([
-            'lga' => 'required|exists:lgas,id',
+            'state' => 'required|string',
+            'lga' => 'nullable|exists:lgas,id',
+            'ward' => 'nullable|exists:wards,id',
             'file' => 'required|file|mimes:csv,xlsx,xls|max:10240', // 10MB max
         ]);
 
         try {
-            $lga = LGA::findOrFail($request->lga);
+            $state = $request->state;
+            $lga = null;
+            $ward = null;
+            
+            // If LGA is provided, use it; otherwise we'll randomize
+            if ($request->lga) {
+                $lga = LGA::findOrFail($request->lga);
+            }
+            
+            // If Ward is provided, use it; otherwise we'll randomize
+            if ($request->ward) {
+                $ward = Ward::findOrFail($request->ward);
+            }
+            
             $file = $request->file('file');
             
             // Read the file and extract NIN column
@@ -61,7 +76,7 @@ class MembersController extends Controller
             }
 
             // Process NIN verification in batches
-            $results = $this->batchVerifyNINs($ninData['nins'], $lga);
+            $results = $this->batchVerifyNINs($ninData['nins'], $lga, $ward, $state);
 
             return response()->json([
                 'success' => true,
@@ -155,14 +170,20 @@ class MembersController extends Controller
     }
 
     /**
-     * Get random polling unit for LGA
+     * Get random polling unit for LGA or Ward
      */
-    private function getRandomPollingUnit($lgaId)
+    private function getRandomPollingUnit($locationId, $isWard = false)
     {
-        $pollingUnit = PollingUnit::inRandomOrder()
-            ->whereHas('ward', function($query) use ($lgaId) {
-                $query->where('lga_id', $lgaId);
-            })->first();
+        if ($isWard) {
+            // Get polling unit for specific ward
+            $pollingUnit = PollingUnit::where('ward_id', $locationId)->inRandomOrder()->first();
+        } else {
+            // Get polling unit for LGA
+            $pollingUnit = PollingUnit::inRandomOrder()
+                ->whereHas('ward', function($query) use ($locationId) {
+                    $query->where('lga_id', $locationId);
+                })->first();
+        }
         return $pollingUnit ? $pollingUnit->name : 'Not specified';
     }
 
@@ -316,7 +337,7 @@ class MembersController extends Controller
     /**
      * Batch verify NINs and create member records
      */
-    private function batchVerifyNINs(array $nins, LGA $lga)
+    private function batchVerifyNINs(array $nins, ?LGA $lga, ?Ward $ward, string $state)
     {
         $results = [
             'total' => count($nins),
@@ -343,6 +364,28 @@ class MembersController extends Controller
                 $memberData = $this->ninService->extractMemberData($verificationData, $nin);
 
                 if ($memberData['nin']) {
+                    // Determine randomization level
+                    if ($ward) {
+                        // Ward provided: randomize polling unit only
+                        $pollingUnit = $this->getRandomPollingUnit($ward->id, true); // true = ward-level
+                        $wardName = $ward->name;
+                        $lgaName = $lga->name;
+                        Log::info("Using provided LGA: {$lgaName}, Ward: {$wardName}, randomizing polling unit: {$pollingUnit}");
+                    } elseif ($lga) {
+                        // LGA provided: randomize ward and polling unit
+                        $wardName = $this->getRandomWard($lga->id);
+                        $pollingUnit = $this->getRandomPollingUnit($lga->id, false); // false = lga-level
+                        $lgaName = $lga->name;
+                        Log::info("Using provided LGA: {$lgaName}, randomizing ward: {$wardName}, polling unit: {$pollingUnit}");
+                    } else {
+                        // State only: randomize LGA, ward, and polling unit
+                        $randomLga = LGA::inRandomOrder()->first();
+                        $wardName = $this->getRandomWard($randomLga->id);
+                        $pollingUnit = $this->getRandomPollingUnit($randomLga->id, false); // false = lga-level
+                        $lgaName = $randomLga->name;
+                        Log::info("State only: Randomized LGA: {$lgaName}, ward: {$wardName}, polling unit: {$pollingUnit}");
+                    }
+                    
                     // Create member record
                     $member = Member::create([
                         'nin' => $memberData['nin'],
@@ -352,13 +395,13 @@ class MembersController extends Controller
                         'date_of_birth' => $memberData['date_of_birth'],
                         'phone_number' => $memberData['phone_number'],
                         'email' => $memberData['email'],
-                        'state' => 'Osun', // Hardcoded as requested
-                        'lga' => $lga->name,
-                        'ward' => $this->getRandomWard($lga->id),
-                        'polling_unit' => $this->getRandomPollingUnit($lga->id),
-                        'residential_address' => $memberData['residential_address'] ?: 'Not specified',
-                        'membership_number' => $this->generateMembershipNumber($lga->name),
-                        'registration_date' => now()->toDateString(),
+                        'state' => $state,
+                        'lga' => $lgaName,
+                        'ward' => $wardName,
+                        'polling_unit' => $pollingUnit,
+                        'residential_address' => $memberData['residential_address'],
+                        'membership_number' => $this->generateMembershipNumber($lgaName),
+                        'registration_date' => now(),
                         'agentcode' => '2', // Hardcoded as requested
                     ]);
 

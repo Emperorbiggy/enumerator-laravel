@@ -3,11 +3,63 @@ import { Head } from '@inertiajs/react';
 
 export default function Upload({ lgas }) {
     const [selectedLga, setSelectedLga] = useState('');
+    const [selectedWard, setSelectedWard] = useState('');
+    const [wards, setWards] = useState([]);
     const [selectedFile, setSelectedFile] = useState(null);
     const [processing, setProcessing] = useState(false);
     const [progress, setProgress] = useState(0);
     const [results, setResults] = useState(null);
+    const [formData, setFormData] = useState({
+        state: '',
+        lga: '',
+        ward: '',
+        file: null
+    });
     const [error, setError] = useState('');
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }));
+        
+        // Reset dependent fields
+        if (name === 'state') {
+            setSelectedLga('');
+            setSelectedWard('');
+            setWards([]);
+            setFormData(prev => ({
+                ...prev,
+                lga: '',
+                ward: ''
+            }));
+        } else if (name === 'lga') {
+            setSelectedWard('');
+            setFormData(prev => ({
+                ...prev,
+                ward: ''
+            }));
+            
+            // Fetch wards for selected LGA
+            if (value) {
+                fetchWards(value);
+            } else {
+                setWards([]);
+            }
+        }
+    };
+
+    const fetchWards = async (lgaId) => {
+        try {
+            const response = await fetch(`/api/lgas/${lgaId}/wards`);
+            const data = await response.json();
+            setWards(data.wards || []);
+        } catch (error) {
+            console.error('Error fetching wards:', error);
+            setWards([]);
+        }
+    };
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -35,8 +87,8 @@ export default function Upload({ lgas }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        if (!selectedLga || !selectedFile) {
-            setError('Please select an LGA and upload a file');
+        if (!formData.state || !selectedFile) {
+            setError('Please select a state and upload a file');
             return;
         }
 
@@ -45,14 +97,23 @@ export default function Upload({ lgas }) {
         setError('');
         setResults(null);
 
-        const formData = new FormData();
-        formData.append('lga', selectedLga);
-        formData.append('file', selectedFile);
+        const submitData = new FormData();
+        submitData.append('state', formData.state);
+        submitData.append('file', selectedFile);
+        
+        // Only append optional fields if they have values
+        if (formData.lga) {
+            submitData.append('lga', formData.lga);
+        }
+        
+        if (formData.ward) {
+            submitData.append('ward', formData.ward);
+        }
 
         try {
             const response = await fetch('/members/upload', {
                 method: 'POST',
-                body: formData,
+                body: submitData,
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                     'Accept': 'application/json',
@@ -84,24 +145,76 @@ export default function Upload({ lgas }) {
                         <div className="p-6 bg-white border-b border-gray-200">
                             <h1 className="text-2xl font-bold text-gray-800 mb-6">Upload NIN Verification File</h1>
                             <form onSubmit={handleSubmit}>
-                                <div className="mb-6">
-                                    <label htmlFor="lga" className="block text-sm font-medium text-gray-700 mb-2">
-                                        Select LGA <span className="text-red-500">*</span>
-                                    </label>
-                                    <select
-                                        id="lga"
-                                        value={selectedLga}
-                                        onChange={(e) => setSelectedLga(e.target.value)}
-                                        required
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="">Choose an LGA...</option>
-                                        {lgas.map((lga) => (
-                                            <option key={lga.id} value={lga.id}>
-                                                {lga.name}
-                                            </option>
-                                        ))}
-                                    </select>
+                                <div className="space-y-6">
+                                    <div>
+                                        <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-2">
+                                            Select State *
+                                        </label>
+                                        <select
+                                            id="state"
+                                            name="state"
+                                            value={formData.state}
+                                            onChange={handleInputChange}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            required
+                                        >
+                                            <option value="">Select State</option>
+                                            <option value="Osun">Osun</option>
+                                        </select>
+                                        <p className="mt-1 text-sm text-gray-500">
+                                            Currently only Osun state is available
+                                        </p>
+                                    </div>
+
+                                    {formData.state && (
+                                        <div>
+                                            <label htmlFor="lga" className="block text-sm font-medium text-gray-700 mb-2">
+                                                Select Local Government Area (Optional)
+                                            </label>
+                                            <select
+                                                id="lga"
+                                                name="lga"
+                                                value={formData.lga}
+                                                onChange={handleInputChange}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            >
+                                                <option value="">Select LGA (Optional - will randomize if not selected)</option>
+                                                {lgas.map(lga => (
+                                                    <option key={lga.id} value={lga.id}>
+                                                        {lga.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <p className="mt-1 text-sm text-gray-500">
+                                                Leave empty to randomize LGA, Ward, and Polling Unit
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {formData.lga && wards.length > 0 && (
+                                        <div>
+                                            <label htmlFor="ward" className="block text-sm font-medium text-gray-700 mb-2">
+                                                Select Ward (Optional)
+                                            </label>
+                                            <select
+                                                id="ward"
+                                                name="ward"
+                                                value={formData.ward}
+                                                onChange={handleInputChange}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            >
+                                                <option value="">Select Ward (Optional - will randomize if not selected)</option>
+                                                {wards.map(ward => (
+                                                    <option key={ward.id} value={ward.id}>
+                                                        {ward.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <p className="mt-1 text-sm text-gray-500">
+                                                Leave empty to randomize Ward and Polling Unit within selected LGA
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="mb-6">
