@@ -78,7 +78,7 @@ class MembersController extends Controller
 
             // Process NIN verification in batches
             $skipVerification = $request->boolean('skip_verification', false);
-            $results = $this->batchVerifyNINs($ninData['nins'], $lga, $ward, $state, $skipVerification, $ninData['file_data']);
+            $results = $this->batchVerifyNINs($ninData['nins'], $lga, $ward, $state, $skipVerification, $ninData['file_data'], $environment);
 
             return response()->json([
                 'success' => true,
@@ -386,38 +386,15 @@ class MembersController extends Controller
     private function getExternalDatabaseConnection()
     {
         try {
-            $config = [
-                'host' => env('DB_EXTERNAL_HOST', '127.0.0.1'),
-                'port' => env('DB_EXTERNAL_PORT', '3306'),
-                'database' => env('DB_EXTERNAL_DATABASE', 'enumerator'),
-                'username' => env('DB_EXTERNAL_USERNAME', 'root'),
-                'password' => env('DB_EXTERNAL_PASSWORD', ''),
-                'charset' => 'utf8mb4',
-                'collation' => 'utf8mb4_unicode_ci',
-                'prefix' => '',
-            ];
-
-            Log::info('EXTERNAL DATABASE CONFIG:', [
-                'host' => $config['host'],
-                'port' => $config['port'],
-                'database' => $config['database'],
-                'username' => $config['username'],
-                'password_set' => !empty($config['password']) ? 'YES' : 'NO'
-            ]);
-
-            $capsule = new \Illuminate\Database\Capsule\Manager;
-            $capsule->addConnection($config, 'external');
-            $capsule->setAsGlobal();
-            $capsule->bootEloquent();
-
-            $connection = $capsule->getConnection('external');
+            // Use the configured external_mysql connection from database.php
+            $connection = DB::connection('external_mysql');
             
             // Test the connection
             $connection->select('SELECT 1');
             
-            Log::info('EXTERNAL DATABASE CONNECTION: SUCCESS - Connection established and tested');
-            
+            Log::info('EXTERNAL DATABASE CONNECTION: SUCCESS - Using external_mysql connection');
             return $connection;
+            
         } catch (\Exception $e) {
             Log::error('EXTERNAL DATABASE CONNECTION: FAILED - ' . $e->getMessage());
             Log::error('Connection error details:', [
@@ -433,7 +410,7 @@ class MembersController extends Controller
     /**
      * Batch verify NINs and create member records
      */
-    private function batchVerifyNINs(array $nins, ?LGA $lga, ?Ward $ward, string $state, bool $skipVerification = false, array $fileData = [])
+    private function batchVerifyNINs(array $nins, ?LGA $lga, ?Ward $ward, string $state, bool $skipVerification = false, array $fileData = [], string $environment = 'test')
     {
         $results = [
             'total' => count($nins),
@@ -444,8 +421,6 @@ class MembersController extends Controller
             'errors' => []
         ];
 
-        $environment = config('services.prembly.env', 'test');
-        
         // Pre-filter NINs based on environment
         $filteredNins = $this->preFilterNINs($nins, $environment);
         
