@@ -78,6 +78,7 @@ class MembersController extends Controller
 
             // Process NIN verification in batches
             $skipVerification = $request->boolean('skip_verification', false);
+            $environment = env('DB_ENV', 'test');
             $results = $this->batchVerifyNINs($ninData['nins'], $lga, $ward, $state, $skipVerification, $ninData['file_data'], $environment);
 
             return response()->json([
