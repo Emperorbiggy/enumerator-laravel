@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, usePage, router } from '@inertiajs/react';
 
 export default function AdminLayout({ children, title }) {
     const { url } = usePage();
@@ -11,6 +11,7 @@ export default function AdminLayout({ children, title }) {
         { name: 'Stats', href: '/admin/enumerator-performance', icon: 'chart-bar' },
         { name: 'Data Sub', href: '/admin/data-sub', icon: 'database' },
         { name: 'Transactions', href: '/admin/data-sub-transactions', icon: 'receipt' },
+        { name: 'NIN Upload', href: '/upload', icon: 'upload' },
     ];
 
     const icons = {
@@ -39,6 +40,19 @@ export default function AdminLayout({ children, title }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
             </svg>
         ),
+        upload: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+        ),
+    };
+
+    const handleLogout = () => {
+        router.post('/admin/logout', {}, {
+            onSuccess: () => {
+                router.visit('/admin/login');
+            }
+        });
     };
 
     const isActive = (href) => {
@@ -57,15 +71,15 @@ export default function AdminLayout({ children, title }) {
 
                 {/* Sidebar */}
                 <div className={`
-                    fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-yellow-600 to-yellow-700 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0
+                    fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-yellow-600 to-yellow-700 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 lg:flex lg:flex-col
                     ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
                 `}>
-                    <div className="flex items-center justify-center h-16 px-4 bg-yellow-800">
+                    <div className="flex items-center justify-center h-16 px-4 bg-yellow-800 flex-shrink-0">
                         <h1 className="text-xl font-bold text-white">Admin Panel</h1>
                     </div>
                     
-                    <nav className="mt-8">
-                        <div className="px-4 space-y-2">
+                    <nav className="flex-1 mt-8 overflow-y-auto">
+                        <div className="px-4 space-y-2 pb-4">
                             {navigation.map((item) => (
                                 <Link
                                     key={item.name}
@@ -88,7 +102,7 @@ export default function AdminLayout({ children, title }) {
                     </nav>
 
                     {/* User info at bottom */}
-                    <div className="absolute bottom-0 w-full p-4">
+                    <div className="flex-shrink-0 p-4 border-t border-yellow-800">
                         <div className="bg-yellow-800 rounded-lg p-3 text-center">
                             <p className="text-yellow-100 text-sm">Admin User</p>
                             <p className="text-yellow-200 text-xs">System Administrator</p>
@@ -119,16 +133,26 @@ export default function AdminLayout({ children, title }) {
                                     </div>
                                     
                                     {/* Actions */}
-                                    <div className="ml-4 flex items-center space-x-4">
+                                    <div className="ml-4 flex items-center space-x-2 sm:space-x-4">
                                         <Link
                                             href="/"
-                                            className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
+                                            className="text-gray-500 hover:text-gray-700 px-2 sm:px-3 py-2 rounded-md text-sm font-medium flex items-center"
                                         >
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                             </svg>
                                             <span className="hidden sm:inline ml-2">Go to Site</span>
                                         </Link>
+                                        
+                                        <button
+                                            onClick={handleLogout}
+                                            className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2 sm:px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                            </svg>
+                                            <span className="hidden sm:inline ml-2">Logout</span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>

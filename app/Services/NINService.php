@@ -4,6 +4,8 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class NINService
 {
@@ -120,6 +122,7 @@ class NINService
             'ward' => null, // Not provided in response
             'polling_unit' => null, // Not provided in response
             'residential_address' => $data['residence_address'] ?? null,
+            'photo' => $data['photo'] ?? null, // Photo URL from API
             // Verification metadata
             'verification_status' => $verificationData['verification']['status'] ?? null,
             'verification_reference' => $verificationData['verification']['reference'] ?? null,
@@ -146,6 +149,67 @@ class NINService
         }
         
         return $dateString;
+    }
+    
+    /**
+     * Download and store photo from URL to local storage
+     *
+     * @param string|null $photoUrl
+     * @param string $nin
+     * @return string|null Local photo URL or null if failed
+     */
+    public function downloadAndStorePhoto(string $photoUrl, string $nin): ?string
+    {
+        try {
+            // If photoUrl is empty, return null
+            if (empty($photoUrl)) {
+                return null;
+            }
+
+            // Check if photo is base64 data (starts with /9j/ for JPEG)
+            if (strpos($photoUrl, '/9j/') === 0) {
+                // Handle base64 image data
+                $imageContent = base64_decode($photoUrl);
+                if ($imageContent === false) {
+                    Log::error("Failed to decode base64 photo", ['nin' => $nin]);
+                    return null;
+                }
+            } else {
+                // Handle URL - download image from URL
+                $imageContent = file_get_contents($photoUrl);
+                
+                if ($imageContent === false) {
+                    Log::error("Failed to download photo from URL", ['url' => $photoUrl, 'nin' => $nin]);
+                    return null;
+                }
+            }
+            
+            // Generate unique filename
+            $filename = 'nin_' . $nin . '_' . Str::random(8) . '.jpg';
+            $path = 'images/' . $filename;
+            
+            // Store in public/images directory
+            $stored = Storage::disk('public')->put($path, $imageContent);
+            
+            if (!$stored) {
+                Log::error("Failed to store photo", ['path' => $path, 'nin' => $nin]);
+                return null;
+            }
+            
+            // Return public URL (using storage link)
+            $publicUrl = asset('storage/' . $path);
+            Log::info("Photo stored successfully", ['nin' => $nin, 'url' => $publicUrl]);
+            
+            return $publicUrl;
+            
+        } catch (\Exception $e) {
+            Log::error("Error downloading photo", [
+                'nin' => $nin,
+                'photo_url' => $photoUrl,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
     }
     
     /**

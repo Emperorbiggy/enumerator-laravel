@@ -25,27 +25,30 @@ Route::get('/dashboard', function () {
 
 // Admin routes
 Route::prefix('admin')->name('admin.')->group(function () {
+    // Public routes (no authentication required)
     Route::get('/login', [AdminController::class, 'showLoginForm'])->name('login');
     Route::post('/login', [AdminController::class, 'login'])->name('login.submit');
     Route::post('/logout', [AdminController::class, 'logout'])->name('logout');
     
-    // Admin routes without authentication
-    Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
-    Route::get('/enumerators', [AdminController::class, 'enumerators'])->name('enumerators');
-    Route::get('/enumerator-performance', [AdminController::class, 'enumeratorPerformance'])->name('enumerator.performance');
-    Route::get('/enumerator/{code}/members', [AdminController::class, 'showEnumeratorMembers'])->name('enumerator.members');
-    Route::get('/enumerators/export', [AdminController::class, 'exportEnumerators'])->name('enumerators.export');
-    Route::get('/enumerators/{enumerator}', [AdminController::class, 'showEnumerator'])->name('enumerators.show');
-    Route::put('/enumerators/{enumerator}', [AdminController::class, 'updateEnumerator'])->name('enumerators.update');
-    Route::get('/data-sub', [AdminController::class, 'dataSub'])->name('data.sub');
-    Route::get('/data-sub-transactions', [AdminController::class, 'dataSubTransactions'])->name('data.sub.transactions');
-    Route::post('/send-batch-data', [AdminController::class, 'sendBatchData'])->name('send.batch.data');
-    Route::post('/send-individual-data', [AdminController::class, 'sendIndividualData'])->name('send.individual.data');
-    Route::post('/mark-all-completed', [AdminController::class, 'markAllCompleted'])->name('mark.all.completed');
-    Route::post('/revert-today-manual-completions', [AdminController::class, 'revertTodayManualCompletions'])->name('revert.today.manual.completions');
-    Route::post('/retry-transaction', [AdminController::class, 'retryTransaction'])->name('retry.transaction');
-    Route::get('/failed-transactions', [AdminController::class, 'getFailedTransactions'])->name('failed.transactions');
-    Route::get('/data-plan-management', [AdminController::class, 'dataPlanManagement'])->name('data.plan.management');
+    // Protected routes (authentication required)
+    Route::middleware('admin')->group(function () {
+        Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
+        Route::get('/enumerators', [AdminController::class, 'enumerators'])->name('enumerators');
+        Route::get('/enumerator-performance', [AdminController::class, 'enumeratorPerformance'])->name('enumerator.performance');
+        Route::get('/enumerator/{code}/members', [AdminController::class, 'showEnumeratorMembers'])->name('enumerator.members');
+        Route::get('/enumerators/export', [AdminController::class, 'exportEnumerators'])->name('enumerators.export');
+        Route::get('/enumerators/{enumerator}', [AdminController::class, 'showEnumerator'])->name('enumerators.show');
+        Route::put('/enumerators/{enumerator}', [AdminController::class, 'updateEnumerator'])->name('enumerators.update');
+        Route::get('/data-sub', [AdminController::class, 'dataSub'])->name('data.sub');
+        Route::get('/data-sub-transactions', [AdminController::class, 'dataSubTransactions'])->name('data.sub.transactions');
+        Route::post('/send-batch-data', [AdminController::class, 'sendBatchData'])->name('send.batch.data');
+        Route::post('/send-individual-data', [AdminController::class, 'sendIndividualData'])->name('send.individual.data');
+        Route::post('/mark-all-completed', [AdminController::class, 'markAllCompleted'])->name('mark.all.completed');
+        Route::post('/revert-today-manual-completions', [AdminController::class, 'revertTodayManualCompletions'])->name('revert.today.manual.completions');
+        Route::post('/retry-transaction', [AdminController::class, 'retryTransaction'])->name('retry.transaction');
+        Route::get('/failed-transactions', [AdminController::class, 'getFailedTransactions'])->name('failed.transactions');
+        Route::get('/data-plan-management', [AdminController::class, 'dataPlanManagement'])->name('data.plan.management');
+    });
 });
 
 // Enumerator API routes
@@ -71,10 +74,12 @@ Route::prefix('api/external-members')->group(function () {
     Route::get('/{id}', [ExternalMembersController::class, 'show']);
 });
 
-// Members routes
-Route::get('/upload', [MembersController::class, 'showUploadForm'])->name('upload.form');
-Route::post('/members/upload', [MembersController::class, 'uploadAndVerify'])->name('members.upload');
-Route::get('/members', [MembersController::class, 'index'])->name('members.index');
+// Members routes (admin protected)
+Route::middleware('admin')->group(function () {
+    Route::get('/upload', [MembersController::class, 'showUploadForm'])->name('upload.form');
+    Route::post('/members/upload', [MembersController::class, 'uploadAndVerify'])->name('members.upload');
+    Route::get('/members', [MembersController::class, 'index'])->name('members.index');
+});
 
 // API routes for dynamic dropdowns
 Route::get('/api/lgas/{lga}/wards', [WardController::class, 'getWardsByLga'])->name('api.lgas.wards');

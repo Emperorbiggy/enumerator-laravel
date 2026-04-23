@@ -1,7 +1,16 @@
 import React, { useState } from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
+import AdminLayout from '@/Layouts/AdminLayout';
 
 export default function Upload({ lgas }) {
+    return (
+        <AdminLayout title="NIN Upload">
+            <UploadContent lgas={lgas} />
+        </AdminLayout>
+    );
+}
+
+function UploadContent({ lgas }) {
     const [selectedLga, setSelectedLga] = useState('');
     const [selectedWard, setSelectedWard] = useState('');
     const [wards, setWards] = useState([]);
@@ -13,15 +22,18 @@ export default function Upload({ lgas }) {
         state: '',
         lga: '',
         ward: '',
-        file: null
+        file: null,
+        skipVerification: false
     });
     const [error, setError] = useState('');
 
     const handleInputChange = (e) => {
-        const { name, value } = e.target;
+        const { name, value, type, checked } = e.target;
+        const fieldValue = type === 'checkbox' ? checked : value;
+        
         setFormData(prev => ({
             ...prev,
-            [name]: value
+            [name]: fieldValue
         }));
         
         // Reset dependent fields
@@ -109,6 +121,9 @@ export default function Upload({ lgas }) {
         if (formData.ward) {
             submitData.append('ward', formData.ward);
         }
+        
+        // Append skip verification flag
+        submitData.append('skip_verification', formData.skipVerification ? '1' : '0');
 
         try {
             const response = await fetch('/members/upload', {
@@ -136,10 +151,10 @@ export default function Upload({ lgas }) {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100">
+        <>
             <Head title="Upload NIN File" />
 
-            <div className="py-12">
+            <div className="py-6">
                 <div className="max-w-4xl mx-auto sm:px-6 lg:px-8">
                     <div className="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                         <div className="p-6 bg-white border-b border-gray-200">
@@ -238,6 +253,25 @@ export default function Upload({ lgas }) {
                                             Selected: {selectedFile.name}
                                         </p>
                                     )}
+                                </div>
+
+                                <div className="mb-6">
+                                    <div className="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            id="skipVerification"
+                                            name="skipVerification"
+                                            checked={formData.skipVerification}
+                                            onChange={handleInputChange}
+                                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        />
+                                        <label htmlFor="skipVerification" className="ml-2 block text-sm text-gray-700">
+                                            Skip NIN Verification
+                                        </label>
+                                    </div>
+                                    <p className="mt-1 text-sm text-gray-500">
+                                        Check this to skip API verification and create members directly from NINs in the file
+                                    </p>
                                 </div>
 
                                 <div className="mb-6">
@@ -344,17 +378,34 @@ export default function Upload({ lgas }) {
                     {/* Instructions */}
                     <div className="bg-blue-50 rounded-lg p-6 mt-6">
                         <h3 className="text-lg font-semibold text-blue-800 mb-3">Instructions</h3>
-                        <ul className="list-disc list-inside text-blue-700 space-y-1">
-                            <li>Select the LGA for the members you're uploading</li>
-                            <li>Upload a CSV or Excel file containing NIN numbers</li>
-                            <li>The file must have a column named "NIN" (case-insensitive)</li>
-                            <li>Each NIN will be verified using the Prembly API</li>
-                            <li>Successfully verified NINs will be automatically added as members</li>
-                            <li>Processing may take several minutes depending on the number of NINs</li>
-                        </ul>
+                        <div className="space-y-4">
+                            <div>
+                                <h4 className="font-medium text-blue-800 mb-2">Normal Mode (API Verification):</h4>
+                                <ul className="list-disc list-inside text-blue-700 space-y-1">
+                                    <li>Upload a CSV or Excel file containing NIN numbers</li>
+                                    <li>The file must have a column named "NIN" (case-insensitive)</li>
+                                    <li>Each NIN will be verified using the Prembly API</li>
+                                    <li>Member data will be extracted from API response</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 className="font-medium text-blue-800 mb-2">Skip Verification Mode:</h4>
+                                <ul className="list-disc list-inside text-blue-700 space-y-1">
+                                    <li>Check "Skip NIN Verification" to bypass API calls</li>
+                                    <li>File must contain these columns: NIN, FIRST NAME, LAST NAME, GENDER, ADDRESS, PHONE NUMBER</li>
+                                    <li>Optional column: DATE OF BIRTH (will default to 1990-01-01 if not provided)</li>
+                                    <li>Column names are case-insensitive (e.g., "First Name" or "firstname" both work)</li>
+                                    <li>Photo will be set to: https://humanity.peoplefirst.org.ng/images/avatar.png</li>
+                                    <li>Cost-effective option for bulk uploads with pre-verified data</li>
+                                </ul>
+                            </div>
+                            <div className="text-sm text-blue-600">
+                                <strong>Note:</strong> Processing may take several minutes depending on the number of NINs
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }

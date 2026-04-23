@@ -40,8 +40,11 @@ class AdminController extends Controller
 
     public function logout(Request $request)
     {
-        // Since no authentication is required, just redirect to dashboard
-        return redirect()->route('admin.dashboard');
+        Auth::guard('admin')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        
+        return redirect()->route('admin.login');
     }
 
     public function dashboard()

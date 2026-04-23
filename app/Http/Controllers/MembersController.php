@@ -46,6 +46,7 @@ class MembersController extends Controller
             'lga' => 'nullable|exists:lgas,id',
             'ward' => 'nullable|exists:wards,id',
             'file' => 'required|file|mimes:csv,xlsx,xls|max:10240', // 10MB max
+            'skip_verification' => 'nullable|boolean',
         ]);
 
         try {
@@ -76,7 +77,8 @@ class MembersController extends Controller
             }
 
             // Process NIN verification in batches
-            $results = $this->batchVerifyNINs($ninData['nins'], $lga, $ward, $state);
+            $skipVerification = $request->boolean('skip_verification', false);
+            $results = $this->batchVerifyNINs($ninData['nins'], $lga, $ward, $state, $skipVerification, $ninData['file_data']);
 
             return response()->json([
                 'success' => true,
@@ -108,6 +110,7 @@ class MembersController extends Controller
         $rawNins = [];
         $cleanNins = [];
         $totalRows = 0;
+        $fileData = [];
 
         if (!empty($data[0])) {
             $headers = $data[0][0] ?? [];
@@ -138,7 +141,19 @@ class MembersController extends Controller
                             
                             if ($cleanNin) {
                                 $cleanNins[] = $cleanNin;
-                            }
+                                // Store the entire row data for this NIN
+                                // Make sure we have enough elements in headers and row
+                                if (count($headers) === count($row)) {
+                                    $fileData[$cleanNin] = array_combine($headers, $row);
+                                } else {
+                                    // Fallback: create associative array manually
+                                    $rowData = [];
+                                    for ($j = 0; $j < count($headers) && $j < count($row); $j++) {
+                                        $rowData[$headers[$j]] = $row[$j] ?? '';
+                                    }
+                                    $fileData[$cleanNin] = $rowData;
+                                }
+                                                            }
                         }
                     }
                 }
@@ -148,7 +163,8 @@ class MembersController extends Controller
                 'nins' => array_unique($cleanNins), // Remove duplicates
                 'raw_nins' => array_unique($rawNins),
                 'total_rows' => $totalRows,
-                'nin_count' => count($cleanNins)
+                'nin_count' => count($cleanNins),
+                'file_data' => $fileData
             ];
         }
         
@@ -156,8 +172,88 @@ class MembersController extends Controller
             'nins' => [],
             'raw_nins' => [],
             'total_rows' => 0,
-            'nin_count' => 0
+            'nin_count' => 0,
+            'file_data' => []
         ];
+    }
+
+    /**
+     * Extract member data from uploaded file (for skip verification mode)
+     */
+    private function extractMemberDataFromFile($nin, $fileRow)
+    {
+        // Default values
+        $memberData = [
+            'nin' => $nin,
+            'first_name' => 'N/A',
+            'last_name' => 'N/A',
+            'gender' => 'N/A',
+            'date_of_birth' => '1990-01-01', // Default date of birth
+            'phone_number' => 'N/A',
+            'email' => 'N/A',
+            'residential_address' => 'N/A',
+        ];
+
+        if (empty($fileRow)) {
+            return $memberData;
+        }
+
+        // Map columns (case insensitive)
+        $memberData['first_name'] = $this->getValueFromRow($fileRow, ['first name', 'firstname', 'first_name']) ?? 'N/A';
+        $memberData['last_name'] = $this->getValueFromRow($fileRow, ['last name', 'lastname', 'last_name']) ?? 'N/A';
+        $memberData['gender'] = $this->getValueFromRow($fileRow, ['gender']) ?? 'N/A';
+        $memberData['phone_number'] = $this->getValueFromRow($fileRow, ['phone number', 'phone', 'phone_number']) ?? 'N/A';
+        $memberData['residential_address'] = $this->getValueFromRow($fileRow, ['address', 'residential address', 'residential_address']) ?? 'N/A';
+        
+        // Try to get date of birth from file (optional column)
+        $dateOfBirth = $this->getValueFromRow($fileRow, ['date of birth', 'dob', 'date_of_birth', 'birthdate']);
+        if ($dateOfBirth) {
+            $memberData['date_of_birth'] = $this->formatDate($dateOfBirth);
+        }
+        
+        // Generate email if not provided
+        $email = $this->getValueFromRow($fileRow, ['email']);
+        if ($email) {
+            $memberData['email'] = $email;
+        } else {
+            $memberData['email'] = strtolower(str_replace(' ', '', $memberData['first_name'] . $memberData['last_name'])) . '@example.com';
+        }
+
+        return $memberData;
+    }
+
+    /**
+     * Get value from row using multiple possible column names (case insensitive)
+     */
+    private function getValueFromRow($row, $possibleColumns)
+    {
+        foreach ($possibleColumns as $column) {
+            foreach ($row as $key => $value) {
+                if (strtolower(trim($key)) === strtolower(trim($column))) {
+                    return trim($value) ?: null;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Format date from various formats to Y-m-d
+     */
+    private function formatDate($date)
+    {
+        if (empty($date)) {
+            return '1990-01-01';
+        }
+
+        try {
+            // Try to create DateTime object from various formats
+            $dateTime = new \DateTime($date);
+            return $dateTime->format('Y-m-d');
+        } catch (\Exception $e) {
+            // If date parsing fails, return default date
+            return '1990-01-01';
+        }
     }
 
     /**
@@ -337,7 +433,7 @@ class MembersController extends Controller
     /**
      * Batch verify NINs and create member records
      */
-    private function batchVerifyNINs(array $nins, ?LGA $lga, ?Ward $ward, string $state)
+    private function batchVerifyNINs(array $nins, ?LGA $lga, ?Ward $ward, string $state, bool $skipVerification = false, array $fileData = [])
     {
         $results = [
             'total' => count($nins),
@@ -359,12 +455,32 @@ class MembersController extends Controller
 
         foreach ($filteredNins as $nin) {
             try {
-                // Verify NIN (only NINs that don't exist in either database reach here)
-                $verificationData = $this->ninService->verifyNIN($nin);
-                $memberData = $this->ninService->extractMemberData($verificationData, $nin);
+                if ($skipVerification) {
+                    // Skip verification - get data from uploaded file
+                    $memberData = $this->extractMemberDataFromFile($nin, $fileData[$nin] ?? []);
+                    $memberData['photo'] = 'https://humanity.peoplefirst.org.ng/images/avatar.png';
+                    Log::info("SKIPPED VERIFICATION: Creating member for NIN: $nin from file data");
+                } else {
+                    // Verify NIN (only NINs that don't exist in either database reach here)
+                    $verificationData = $this->ninService->verifyNIN($nin);
+                    $memberData = $this->ninService->extractMemberData($verificationData, $nin);
+                    
+                    // Download and store photo if available
+                    if (!empty($memberData['photo'])) {
+                        $localPhotoUrl = $this->ninService->downloadAndStorePhoto($memberData['photo'], $nin);
+                        if ($localPhotoUrl) {
+                            $memberData['photo'] = $localPhotoUrl;
+                        } else {
+                            $memberData['photo'] = null;
+                        }
+                    } else {
+                        $memberData['photo'] = null;
+                    }
+                }
 
-                if ($memberData['nin']) {
-                    // Determine randomization level
+                if ($memberData['nin'] && !empty($memberData['first_name'])) {
+                    // Only create member if verification was successful and we have valid data
+                    Log::info("Creating member for NIN: $nin - Verification successful");
                     if ($ward) {
                         // Ward provided: randomize polling unit only
                         $pollingUnit = $this->getRandomPollingUnit($ward->id, true); // true = ward-level
@@ -400,6 +516,7 @@ class MembersController extends Controller
                         'ward' => $wardName,
                         'polling_unit' => $pollingUnit,
                         'residential_address' => $memberData['residential_address'],
+                        'photo_path' => $memberData['photo'],
                         'membership_number' => $this->generateMembershipNumber($lgaName),
                         'registration_date' => now(),
                         'agentcode' => '2', // Hardcoded as requested
@@ -408,8 +525,14 @@ class MembersController extends Controller
                     $results['verified']++;
                     $results['members_created']++;
                 } else {
-                    $results['failed']++;
-                    $results['errors'][] = "NIN {$nin}: Invalid verification response";
+                    if (empty($memberData['first_name'])) {
+                        $results['failed']++;
+                        $results['errors'][] = "NIN {$nin}: Verification failed - Record not found or invalid NIN";
+                        Log::warning("NIN verification failed - no valid data returned", ['nin' => $nin]);
+                    } else {
+                        $results['failed']++;
+                        $results['errors'][] = "NIN {$nin}: Invalid verification response";
+                    }
                 }
 
             } catch (\Exception $e) {
